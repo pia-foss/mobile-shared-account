@@ -1,0 +1,78 @@
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'org.jetbrains.kotlin:kotlin-serialization:1.3.72'
+    }
+}
+
+plugins {
+    id 'org.jetbrains.kotlin.multiplatform' version '1.3.72'
+    id 'com.android.library'
+    id 'kotlin-android-extensions'
+}
+
+repositories {
+    google()
+    jcenter()
+    mavenCentral()
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android-extensions'
+apply plugin: 'kotlinx-serialization'
+
+android {
+    compileSdkVersion 29
+    defaultConfig {
+        minSdkVersion 15
+        targetSdkVersion 29
+    }
+    buildTypes {
+        'release' {
+            minifyEnabled false
+        }
+    }
+    packagingOptions {
+        pickFirst 'META-INF/*.kotlin_module'
+    }
+}
+
+kotlin {
+    version = "1.0.0"
+    targets {
+        final def iOSPreset = System.getenv('SDK_NAME')?.startsWith("iphoneos") ? presets.iosArm64 : presets.iosX64
+        fromPreset(iOSPreset, "iOS") {
+            binaries {
+                framework("PIAAccount")
+            }
+        }
+        fromPreset(presets.android, "android")
+    }
+
+    sourceSets {
+        commonMain.dependencies {
+            implementation "io.ktor:ktor-client-core:$ktor_version"
+            implementation "org.jetbrains.kotlin:kotlin-stdlib-common"
+            implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core-common:$coroutines_version"
+            implementation "org.jetbrains.kotlinx:kotlinx-serialization-runtime-common:$serialization_version"
+        }
+        commonTest.dependencies {
+            implementation "org.jetbrains.kotlin:kotlin-test"
+            implementation "org.jetbrains.kotlin:kotlin-test-junit"
+            implementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutines_version"
+        }
+        androidMain.dependencies {
+            implementation "io.ktor:ktor-client-android:$ktor_version"
+            implementation "org.jetbrains.kotlin:kotlin-stdlib"
+            implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutines_version"
+            implementation "org.jetbrains.kotlinx:kotlinx-serialization-runtime:$serialization_version"
+        }
+        iOSMain.dependencies {
+            implementation "io.ktor:ktor-client-ios:$ktor_version"
+            implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core-native:$coroutines_version"
+            implementation "org.jetbrains.kotlinx:kotlinx-serialization-runtime-native:$serialization_version"
+        }
+    }
+}
