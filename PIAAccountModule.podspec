@@ -22,6 +22,12 @@ Pod::Spec.new do |spec|
         'KOTLIN_TARGET[sdk=macosx*]' => 'macos_x64'
     }
 
+    spec.subspec "gradle" do |p|
+      
+        p.source_files = "gradle/**/*"
+
+    end
+
     spec.script_phases = [
         {
             :name => 'Build app',
