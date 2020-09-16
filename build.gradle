@@ -22,6 +22,7 @@ repositories {
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android-extensions'
 apply plugin: 'kotlinx-serialization'
+apply plugin: 'kotlin-native-cocoapods'
 
 android {
     compileSdkVersion 29
@@ -76,3 +77,20 @@ kotlin {
         }
     }
 }
+
+task copyFramework {
+    def buildType = project.findProperty('kotlin.build.type') ?: 'DEBUG'
+    dependsOn kotlin.targets.iOS.binaries.getFramework(buildType).linkTask
+
+    doLast {
+        def srcFile = kotlin.targets.iOS.binaries.getFramework(buildType).outputFile
+        def targetDir = getProperty('configuration.build.dir')
+        copy {
+            from srcFile.parent
+            into targetDir
+            include 'PIAAccount.framework/**'
+            include 'PIAAccount.framework.dSYM'
+        }
+    }
+}
+
