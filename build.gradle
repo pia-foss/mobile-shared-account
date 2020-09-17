@@ -42,6 +42,12 @@ android {
 
 kotlin {
     version = "1.0.0"
+    cocoapods {
+        summary = "PIAAccount Module"
+        homepage = "https://www.privateinternetaccess.com"
+        frameworkName = "PIAAccount"
+    }
+
     targets {
         final def iOSPreset = System.getenv('SDK_NAME')?.startsWith("iphoneos") ? presets.iosArm64 : presets.iosX64
         fromPreset(iOSPreset, "iOS") {

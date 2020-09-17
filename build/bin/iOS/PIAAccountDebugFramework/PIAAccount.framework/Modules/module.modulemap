@@ -1,6 +1,0 @@
-framework module PIAAccount {
-    umbrella header "PIAAccount.h"
-
-    export *
-    module * { export * }
-}

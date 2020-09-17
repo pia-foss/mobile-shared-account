@@ -8,7 +8,7 @@ Pod::Spec.new do |spec|
     spec.summary                  = 'Account module testing'
     spec.ios.deployment_target        = "11.0"
 
-    spec.vendored_frameworks      = "build/bin/iOS/PIAAccountReleaseFramework/PIAAccount.framework"
+    spec.vendored_frameworks      = "build/cocoapods/framework/PIAAccount.framework"
 
     spec.source_files = "gradlew", "settings.gradle", "gradle.properties", "build.gradle"
 
