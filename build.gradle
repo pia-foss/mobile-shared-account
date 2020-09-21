@@ -48,6 +48,12 @@ kotlin {
         frameworkName = "PIAAccount"
     }
 
+    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget) {
+        binaries.withType(org.jetbrains.kotlin.gradle.plugin.mpp.Framework) {
+            isStatic = false
+        }
+    }
+
     targets {
         final def iOSPreset = System.getenv('SDK_NAME')?.startsWith("iphoneos") ? presets.iosArm64 : presets.iosX64
         fromPreset(iOSPreset, "iOS") {
@@ -85,7 +91,7 @@ kotlin {
 }
 
 task copyFramework {
-    def buildType = project.findProperty('kotlin.build.type') ?: 'DEBUG'
+    def buildType = 'RELEASE'
     dependsOn kotlin.targets.iOS.binaries.getFramework(buildType).linkTask
 
     doLast {
@@ -99,4 +105,3 @@ task copyFramework {
         }
     }
 }
-
