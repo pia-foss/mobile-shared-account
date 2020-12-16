@@ -1,3 +1,21 @@
+/*
+ *  Copyright (c) 2020 Private Internet Access, Inc.
+ *
+ *  This file is part of the Private Internet Access Mobile Client.
+ *
+ *  The Private Internet Access Mobile Client is free software: you can redistribute it and/or
+ *  modify it under the terms of the GNU General Public License as published by the Free
+ *  Software Foundation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  The Private Internet Access Mobile Client is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ *  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ *  details.
+ *
+ *  You should have received a copy of the GNU General Public License along with the Private
+ *  Internet Access Mobile Client.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.privateinternetaccess.account
 
 import com.privateinternetaccess.account.internals.AndroidAccount
@@ -5,7 +23,9 @@ import com.privateinternetaccess.account.internals.IOSAccount
 import com.privateinternetaccess.account.model.request.AndroidSignupInformation
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation
 import com.privateinternetaccess.account.model.request.IOSSignupInformation
+import com.privateinternetaccess.account.model.response.DedicatedIPInformationResponse.DedicatedIPInformation
 import com.privateinternetaccess.account.model.response.*
+
 
 /**
  * Enum containing the supported platforms.
@@ -50,6 +70,17 @@ public interface AccountAPI {
     fun accountDetails(token: String, callback: (details: AccountInformation?, error: AccountRequestError?) -> Unit)
 
     /**
+     * @param token `String`
+     * @param ipTokens `String`
+     * @param callback `(details: DedicatedIPInformation, error: AccountRequestError?) -> Unit`
+     */
+    fun dedicatedIPs(
+        token: String,
+        ipTokens: List<String>,
+        callback: (details: List<DedicatedIPInformation>, error: AccountRequestError?) -> Unit
+    )
+
+    /**
      * @param callback `(status: ClientStatusInformation?, error: AccountRequestError?) -> Unit`
      */
     fun clientStatus(callback: (status: ClientStatusInformation?, error: AccountRequestError?) -> Unit)
@@ -92,12 +123,35 @@ public interface AccountAPI {
     /**
      * @param email `String`
      * @param code `String`
-     * @param callback `(details: RedeemInformation?, error: AccountRequestError?) -> Unit -> Unit`
+     * @param callback `(details: RedeemInformation?, error: AccountRequestError?) -> Unit`
      */
     fun redeem(
         email: String,
         code: String,
         callback: (details: RedeemInformation?, error: AccountRequestError?) -> Unit
+    )
+
+    /**
+     * It returns an in-app communication message for each platform.
+     *
+     * @param token `String`
+     * @param appVersion `String`
+     * @param callback `(message: MessageInformation?, error: AccountRequestError?) -> Unit`
+     */
+    fun message(
+        token: String,
+        appVersion: String,
+        callback: (message: MessageInformation?, error: AccountRequestError?) -> Unit
+    )
+
+    /**
+     * @param stagingEndpoint `String?` If null. Requests will be done against the endpoints provided by
+     * `AccountClientStateProvider.accountEndpoints`
+     * @param callback `(details: FeatureFlagsInformation?, error: AccountRequestError?) -> Unit`
+     */
+    fun featureFlags(
+        stagingEndpoint: String? = null,
+        callback: (details: FeatureFlagsInformation?, error: AccountRequestError?) -> Unit
     )
 }
 

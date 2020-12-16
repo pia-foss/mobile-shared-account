@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
     spec.name                     = 'PIAAccountModule'
-    spec.version                  = '1.0.1'
+    spec.version                  = '1.1.0'
     spec.homepage                 = 'https://www.privateinternetaccess.com'
     spec.source            		  = { :git => "https://github.com/pia-foss/mobile-common-account.git", :tag => "v#{spec.version}" }
     spec.authors                  = { "Jose Blaya" => "jose@privateinternetaccess.com", "Juan Docal" => "juan@privateinternetaccess.com" }

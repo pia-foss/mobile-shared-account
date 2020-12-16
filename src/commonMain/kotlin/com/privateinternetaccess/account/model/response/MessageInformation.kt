@@ -23,11 +23,29 @@ import kotlinx.serialization.Serializable
 
 
 @Serializable
-class RedeemInformation(
-    @SerialName("code")
-    val message: String?,
-    @SerialName("username")
-    val username: String,
-    @SerialName("password")
-    val password: String
-)
+data class MessageInformation(
+    @SerialName("id")
+    val id: Long,
+    @SerialName("link")
+    val link: Link? = null,
+    @SerialName("message")
+    val message: Map<String, String> = mapOf()
+) {
+    @Serializable
+    data class Link(
+        @SerialName("action")
+        val action: Action,
+        @SerialName("text")
+        val text: Map<String, String>
+    ) {
+        @Serializable
+        data class Action(
+            @SerialName("settings")
+            val settings: Map<String, Boolean> = mapOf(),
+            @SerialName("uri")
+            val uri: String? = null,
+            @SerialName("view")
+            val view: String? = null,
+        )
+    }
+}

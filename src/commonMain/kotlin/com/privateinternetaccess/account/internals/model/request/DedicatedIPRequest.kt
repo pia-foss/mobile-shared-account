@@ -1,3 +1,5 @@
+package com.privateinternetaccess.account.internals.model.request
+
 /*
  *  Copyright (c) 2020 Private Internet Access, Inc.
  *
@@ -16,18 +18,12 @@
  *  Internet Access Mobile Client.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.privateinternetaccess.account.model.response
-
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 
 @Serializable
-class RedeemInformation(
-    @SerialName("code")
-    val message: String?,
-    @SerialName("username")
-    val username: String,
-    @SerialName("password")
-    val password: String
+class DedicatedIPRequest(
+    @SerialName("tokens")
+    val tokens: List<String>
 )

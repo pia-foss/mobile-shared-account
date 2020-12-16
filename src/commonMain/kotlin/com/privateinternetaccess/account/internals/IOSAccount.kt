@@ -1,9 +1,24 @@
+/*
+ *  Copyright (c) 2020 Private Internet Access, Inc.
+ *
+ *  This file is part of the Private Internet Access Mobile Client.
+ *
+ *  The Private Internet Access Mobile Client is free software: you can redistribute it and/or
+ *  modify it under the terms of the GNU General Public License as published by the Free
+ *  Software Foundation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  The Private Internet Access Mobile Client is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ *  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ *  details.
+ *
+ *  You should have received a copy of the GNU General Public License along with the Private
+ *  Internet Access Mobile Client.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.privateinternetaccess.account.internals
 
-import com.privateinternetaccess.account.AccountClientStateProvider
-import com.privateinternetaccess.account.AccountEndpoint
-import com.privateinternetaccess.account.AccountRequestError
-import com.privateinternetaccess.account.IOSAccountAPI
+import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.IOSLoginReceiptRequest
 import com.privateinternetaccess.account.internals.model.response.LoginResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
@@ -18,11 +33,13 @@ import io.ktor.http.*
 import io.ktor.util.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.*
+import kotlinx.serialization.SerializationException
+
 
 internal class IOSAccount(
     clientStateProvider: AccountClientStateProvider,
     userAgentValue: String
-) : IOSAccountAPI, Account(clientStateProvider, userAgentValue) {
+) : IOSAccountAPI, Account(clientStateProvider, userAgentValue, Platform.IOS) {
 
     private enum class Endpoint(val url: String) {
         PAYMENT("/api/client/payment"),
@@ -90,9 +107,14 @@ internal class IOSAccount(
         endpoints: List<AccountEndpoint>,
         callback: (token: String?, error: AccountRequestError?) -> Unit
     ) = async {
+        var token: String? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var token: String? = null
-            var error: AccountRequestError? = null
+            error = null
             var subdomain: String?
             val client = if (accountEndpoint.usePinnedCertificate) {
                 subdomain = CommonMetaEndpoint.LOGIN.url
@@ -112,7 +134,11 @@ internal class IOSAccount(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        token = json.decodeFromString(LoginResponse.serializer(), content).token
+                        try {
+                            token = json.decodeFromString(LoginResponse.serializer(), content).token
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -122,17 +148,14 @@ internal class IOSAccount(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(token, error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(token, error)
         }
     }
 
@@ -145,9 +168,14 @@ internal class IOSAccount(
         endpoints: List<AccountEndpoint>,
         callback: (temporaryPassword: String?, error: AccountRequestError?) -> Unit
     ) = async {
+        var temporaryPassword: String? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var temporaryPassword: String? = null
-            var error: AccountRequestError? = null
+            error = null
             val auth = "$username:$password".encodeBase64()
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
@@ -166,7 +194,11 @@ internal class IOSAccount(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        temporaryPassword = json.decodeFromString(SetEmailResponse.serializer(), content).password
+                        try {
+                            temporaryPassword = json.decodeFromString(SetEmailResponse.serializer(), content).password
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -176,17 +208,14 @@ internal class IOSAccount(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(temporaryPassword, error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(temporaryPassword, error)
         }
     }
 
@@ -198,8 +227,13 @@ internal class IOSAccount(
         endpoints: List<AccountEndpoint>,
         callback: (error: AccountRequestError?) -> Unit
     ) = async {
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var error: AccountRequestError? = null
+            error = null
             val auth = "$username:$password".encodeBase64()
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
@@ -222,17 +256,14 @@ internal class IOSAccount(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(error)
         }
     }
 
@@ -241,9 +272,14 @@ internal class IOSAccount(
         endpoints: List<AccountEndpoint>,
         callback: (details: SignUpInformation?, error: AccountRequestError?) -> Unit
     ) = async {
+        var signUpInformation: SignUpInformation? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var signUpInformation: SignUpInformation? = null
-            var error: AccountRequestError? = null
+            error = null
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
             } else {
@@ -260,7 +296,11 @@ internal class IOSAccount(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        signUpInformation = json.decodeFromString(SignUpInformation.serializer(), content)
+                        try {
+                            signUpInformation = json.decodeFromString(SignUpInformation.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -270,17 +310,14 @@ internal class IOSAccount(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(signUpInformation, error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(signUpInformation, error)
         }
     }
 
@@ -289,9 +326,14 @@ internal class IOSAccount(
         endpoints: List<AccountEndpoint>,
         callback: (details: IOSSubscriptionInformation?, error: AccountRequestError?) -> Unit
     ) = async {
+        var subscriptionsInformation: IOSSubscriptionInformation? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var subscriptionsInformation: IOSSubscriptionInformation? = null
-            var error: AccountRequestError? = null
+            error = null
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
             } else {
@@ -310,8 +352,12 @@ internal class IOSAccount(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        subscriptionsInformation =
-                            json.decodeFromString(IOSSubscriptionInformation.serializer(), content)
+                        try {
+                            subscriptionsInformation =
+                                json.decodeFromString(IOSSubscriptionInformation.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -321,17 +367,14 @@ internal class IOSAccount(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(subscriptionsInformation, error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(subscriptionsInformation, error)
         }
     }
     // endregion

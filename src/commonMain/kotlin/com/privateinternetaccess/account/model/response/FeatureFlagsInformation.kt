@@ -1,3 +1,5 @@
+package com.privateinternetaccess.account.model.response
+
 /*
  *  Copyright (c) 2020 Private Internet Access, Inc.
  *
@@ -16,18 +18,14 @@
  *  Internet Access Mobile Client.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.privateinternetaccess.account.model.response
-
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 
 @Serializable
-class RedeemInformation(
-    @SerialName("code")
-    val message: String?,
-    @SerialName("username")
-    val username: String,
-    @SerialName("password")
-    val password: String
+data class FeatureFlagsInformation(
+    @SerialName("flags")
+    val flags: List<String>,
+    @SerialName("latest_version_piax")
+    val latestVersionPiax: List<String>
 )

@@ -1,24 +1,40 @@
+/*
+ *  Copyright (c) 2020 Private Internet Access, Inc.
+ *
+ *  This file is part of the Private Internet Access Mobile Client.
+ *
+ *  The Private Internet Access Mobile Client is free software: you can redistribute it and/or
+ *  modify it under the terms of the GNU General Public License as published by the Free
+ *  Software Foundation, either version 3 of the License, or (at your option) any later version.
+ *
+ *  The Private Internet Access Mobile Client is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ *  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ *  details.
+ *
+ *  You should have received a copy of the GNU General Public License along with the Private
+ *  Internet Access Mobile Client.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.privateinternetaccess.account.internals
 
-import com.privateinternetaccess.account.AccountAPI
-import com.privateinternetaccess.account.AccountClientStateProvider
-import com.privateinternetaccess.account.AccountEndpoint
-import com.privateinternetaccess.account.AccountRequestError
+import com.privateinternetaccess.account.*
+import com.privateinternetaccess.account.internals.model.request.DedicatedIPRequest
 import com.privateinternetaccess.account.internals.model.response.LoginResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
 import com.privateinternetaccess.account.internals.utils.AccountUtils
-import com.privateinternetaccess.account.model.response.AccountInformation
-import com.privateinternetaccess.account.model.response.ClientStatusInformation
-import com.privateinternetaccess.account.model.response.InvitesDetailsInformation
-import com.privateinternetaccess.account.model.response.RedeemInformation
+import com.privateinternetaccess.account.model.response.DedicatedIPInformationResponse.DedicatedIPInformation
+import com.privateinternetaccess.account.model.response.*
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.*
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlin.coroutines.CoroutineContext
+
 
 expect object AccountHttpClient {
     fun client(pinnedEndpoint: Pair<String, String>? = null): HttpClient
@@ -26,7 +42,8 @@ expect object AccountHttpClient {
 
 internal open class Account(
     internal val clientStateProvider: AccountClientStateProvider,
-    private val userAgentValue: String
+    private val userAgentValue: String,
+    private val platform: Platform
 ) : CoroutineScope, AccountAPI {
 
     companion object {
@@ -79,7 +96,7 @@ internal open class Account(
     internal val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
     internal enum class CommonMetaEndpoint(val url: String) {
-        LOGIN("/apiv2/token"),
+        LOGIN("/apiv2/token")
     }
 
     private enum class MetaEndpoint(val url: String) {
@@ -100,7 +117,11 @@ internal open class Account(
         ACCOUNT_DETAILS("/api/client/v2/account"),
         CLIENT_STATUS("/api/client/status"),
         INVITES("/api/client/invites"),
-        REDEEM("/api/client/giftcard_redeem")
+        REDEEM("/api/client/giftcard_redeem"),
+        MESSAGES("/api/client/v2/messages"),
+        DEDICATED_IP("/api/client/v2/dedicated_ip"),
+        ANDROID_FEATURE_FLAG("/clients/desktop/android-flags"),
+        IOS_FEATURE_FLAG("/clients/desktop/ios-flags")
     }
 
     // region CoroutineScope
@@ -137,6 +158,16 @@ internal open class Account(
     ) {
         launch {
             accountDetailsAsync(token, clientStateProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun dedicatedIPs(
+        token: String,
+        ipTokens: List<String>,
+        callback: (details: List<DedicatedIPInformation>, error: AccountRequestError?) -> Unit
+    ) {
+        launch {
+            dedicatedIPsAsync(token, ipTokens, clientStateProvider.accountEndpoints(), callback)
         }
     }
 
@@ -188,6 +219,25 @@ internal open class Account(
             redeemAsync(email, code, clientStateProvider.accountEndpoints(), callback)
         }
     }
+
+    override fun message(
+        token: String,
+        appVersion: String,
+        callback: (message: MessageInformation?, error: AccountRequestError?) -> Unit
+    ) {
+        launch {
+            messageAsync(token, appVersion, clientStateProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun featureFlags(
+        stagingEndpoint: String?,
+        callback: (details: FeatureFlagsInformation?, error: AccountRequestError?) -> Unit
+    ) {
+        launch {
+            featureFlagsAsync(stagingEndpoint, clientStateProvider.accountEndpoints(), callback)
+        }
+    }
     // endregion
 
     // region private
@@ -196,8 +246,13 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (error: AccountRequestError?) -> Unit
     ) = async {
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var error: AccountRequestError? = null
+            error = null
             var subdomain: String?
             val client = if (accountEndpoint.usePinnedCertificate) {
                 subdomain = MetaEndpoint.LOGIN_LINK.url
@@ -220,17 +275,14 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(error)
         }
     }
 
@@ -240,9 +292,14 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (token: String?, error: AccountRequestError?) -> Unit
     ) = async {
+        var token: String? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var token: String? = null
-            var error: AccountRequestError? = null
+            error = null
             var subdomain: String?
             val client = if (accountEndpoint.usePinnedCertificate) {
                 subdomain = CommonMetaEndpoint.LOGIN.url
@@ -262,7 +319,11 @@ internal open class Account(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        token = json.decodeFromString(LoginResponse.serializer(), content).token
+                        try {
+                            token = json.decodeFromString(LoginResponse.serializer(), content).token
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -272,17 +333,14 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(token, error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(token, error)
         }
     }
 
@@ -291,8 +349,13 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (error: AccountRequestError?) -> Unit
     ) = async {
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var error: AccountRequestError? = null
+            error = null
             var subdomain: String?
             val client = if (accountEndpoint.usePinnedCertificate) {
                 subdomain = MetaEndpoint.LOGOUT.url
@@ -315,17 +378,14 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(error)
         }
     }
 
@@ -334,9 +394,14 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (details: AccountInformation?, error: AccountRequestError?) -> Unit
     ) = async {
+        var accountInformation: AccountInformation? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var accountInformation: AccountInformation? = null
-            var error: AccountRequestError? = null
+            error = null
             var subdomain: String?
             val client = if (accountEndpoint.usePinnedCertificate) {
                 subdomain = MetaEndpoint.ACCOUNT_DETAILS.url
@@ -355,7 +420,11 @@ internal open class Account(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        accountInformation = json.decodeFromString(AccountInformation.serializer(), content)
+                        try {
+                            accountInformation = json.decodeFromString(AccountInformation.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -365,17 +434,74 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(accountInformation, error)
+        }
+    }
+
+    private fun dedicatedIPsAsync(
+        token: String,
+        ipTokens: List<String>,
+        endpoints: List<AccountEndpoint>,
+        callback: (details: List<DedicatedIPInformation>, error: AccountRequestError?) -> Unit
+    ) = async {
+        var error: AccountRequestError? = null
+        var dedicatedIPsInformation: List<DedicatedIPInformation> = emptyList()
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
+        for (accountEndpoint in endpoints) {
+            error = null
+            val client = if (accountEndpoint.usePinnedCertificate) {
+                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
+                url("https://${accountEndpoint.endpoint}${Endpoint.DEDICATED_IP.url}")
+                header("Authorization", "Token $token")
+                contentType(ContentType.Application.Json)
+                body = json.encodeToString(DedicatedIPRequest.serializer(), DedicatedIPRequest(ipTokens))
             }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(accountInformation, error)
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    error = AccountRequestError(it.status.value, it.status.description)
+                } else {
+                    it.content.readUTF8Line()?.let { content ->
+                        try {
+                            dedicatedIPsInformation =
+                                json.decodeFromString(
+                                    DedicatedIPInformationResponse.serializer(),
+                                    "{\"result\":$content}"
+                                ).result
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
+                    } ?: run {
+                        error = AccountRequestError(600, "Request response undefined")
+                    }
+                }
             }
-            break
+            response.second?.let {
+                error = AccountRequestError(600, it.message)
+            }
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(dedicatedIPsInformation, error)
         }
     }
 
@@ -383,9 +509,15 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (status: ClientStatusInformation?, error: AccountRequestError?) -> Unit
     ) = async {
-        for (accountEndpoint in endpoints) {
-            var clientStatus: ClientStatusInformation? = null
-            var error: AccountRequestError? = null
+        var clientStatus: ClientStatusInformation? = null
+        var error: AccountRequestError? = null
+        val filteredOutProxies = endpoints.filterNot { it.isProxy }
+        if (filteredOutProxies.isEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
+        for (accountEndpoint in filteredOutProxies) {
+            error = null
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
             } else {
@@ -400,7 +532,11 @@ internal open class Account(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        clientStatus = json.decodeFromString(ClientStatusInformation.serializer(), content)
+                        try {
+                            clientStatus = json.decodeFromString(ClientStatusInformation.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -410,24 +546,14 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // Avoid using proxies for client status as they'll return the proxy ip rather than the client one.
-            // Ignore the response.
-            if (accountEndpoint.isProxy) {
-                clientStatus = null
-                error = AccountRequestError(600, "Ignoring response on proxy endpoint")
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
-            }
-
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(clientStatus, error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(clientStatus, error)
         }
     }
 
@@ -438,9 +564,14 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (temporaryPassword: String?, error: AccountRequestError?) -> Unit
     ) = async {
+        var temporaryPassword: String? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var temporaryPassword: String? = null
-            var error: AccountRequestError? = null
+            error = null
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
             } else {
@@ -458,7 +589,11 @@ internal open class Account(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        temporaryPassword = json.decodeFromString(SetEmailResponse.serializer(), content).password
+                        try {
+                            temporaryPassword = json.decodeFromString(SetEmailResponse.serializer(), content).password
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -468,17 +603,14 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(temporaryPassword, error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(temporaryPassword, error)
         }
     }
 
@@ -489,8 +621,13 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (error: AccountRequestError?) -> Unit
     ) = async {
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var error: AccountRequestError? = null
+            error = null
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
             } else {
@@ -512,17 +649,14 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(error)
         }
     }
 
@@ -531,9 +665,14 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (details: InvitesDetailsInformation?, error: AccountRequestError?) -> Unit
     ) = async {
+        var invitesDetailsInformation: InvitesDetailsInformation? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var invitesDetailsInformation: InvitesDetailsInformation? = null
-            var error: AccountRequestError? = null
+            error = null
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
             } else {
@@ -549,8 +688,12 @@ internal open class Account(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        invitesDetailsInformation =
-                            json.decodeFromString(InvitesDetailsInformation.serializer(), content)
+                        try {
+                            invitesDetailsInformation =
+                                json.decodeFromString(InvitesDetailsInformation.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -560,17 +703,14 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
             }
+        }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(invitesDetailsInformation, error)
-            }
-            break
+        withContext(Dispatchers.Main) {
+            callback(invitesDetailsInformation, error)
         }
     }
 
@@ -580,9 +720,14 @@ internal open class Account(
         endpoints: List<AccountEndpoint>,
         callback: (details: RedeemInformation?, error: AccountRequestError?) -> Unit
     ) = async {
+        var redeemInformation: RedeemInformation? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
         for (accountEndpoint in endpoints) {
-            var redeemInformation: RedeemInformation? = null
-            var error: AccountRequestError? = null
+            error = null
             val client = if (accountEndpoint.usePinnedCertificate) {
                 AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
             } else {
@@ -599,7 +744,11 @@ internal open class Account(
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
-                        redeemInformation = json.decodeFromString(RedeemInformation.serializer(), content)
+                        try {
+                            redeemInformation = json.decodeFromString(RedeemInformation.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
                     } ?: run {
                         error = AccountRequestError(600, "Request response undefined")
                     }
@@ -609,17 +758,136 @@ internal open class Account(
                 error = AccountRequestError(600, it.message)
             }
 
-            // If there has been an error and it's not the last endpoint. Continue to the next one.
-            if (error != null && accountEndpoint != endpoints.last()) {
-                continue
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(redeemInformation, error)
+        }
+    }
+
+    private fun messageAsync(
+            token: String,
+            appVersion: String,
+            endpoints: List<AccountEndpoint>,
+            callback: (message: MessageInformation?, error: AccountRequestError?) -> Unit
+    ) = async {
+        var messageInformation: MessageInformation? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
+        for (accountEndpoint in endpoints) {
+            error = null
+            val client = if (accountEndpoint.usePinnedCertificate) {
+                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
             }
 
-            // If the request was successful or we exhausted the list of endpoints.
-            // Report the request result and break the loop.
-            withContext(Dispatchers.Main) {
-                callback(redeemInformation, error)
+            val platform = when (platform) {
+                Platform.IOS -> "ios"
+                Platform.ANDROID -> "android"
             }
-            break
+            val response = client.getCatching<Pair<HttpResponse?, Exception?>> {
+                url("https://${accountEndpoint.endpoint}${Endpoint.MESSAGES.url}")
+                header("Authorization", "Token $token")
+                parameter("client", platform)
+                parameter("version", appVersion)
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    error = AccountRequestError(it.status.value, it.status.description)
+                } else {
+                    it.content.readUTF8Line()?.let { content ->
+                        try {
+                            messageInformation = json.decodeFromString(MessageInformation.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
+                    } ?: run {
+                        error = AccountRequestError(600, "Request response undefined")
+                    }
+                }
+            }
+            response.second?.let {
+                error = AccountRequestError(600, it.message)
+            }
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(messageInformation, error)
+        }
+    }
+
+    private fun featureFlagsAsync(
+        stagingEndpoint: String?,
+        endpoints: List<AccountEndpoint>,
+        callback: (details: FeatureFlagsInformation?, error: AccountRequestError?) -> Unit
+    ) = async {
+        var flagsInformation: FeatureFlagsInformation? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
+        for (accountEndpoint in endpoints) {
+            error = null
+            val client = if (accountEndpoint.usePinnedCertificate) {
+                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+
+            val subdomain = when (platform) {
+                Platform.IOS -> Endpoint.IOS_FEATURE_FLAG.url
+                Platform.ANDROID -> Endpoint.ANDROID_FEATURE_FLAG.url
+            }
+            val response = client.getCatching<Pair<HttpResponse?, Exception?>> {
+                if (stagingEndpoint == null) {
+                    url("https://${accountEndpoint.endpoint}$subdomain")
+                } else {
+                    url("https://$stagingEndpoint")
+                }
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    error = AccountRequestError(it.status.value, it.status.description)
+                } else {
+                    it.content.readUTF8Line()?.let { content ->
+                        try {
+                            flagsInformation = json.decodeFromString(FeatureFlagsInformation.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
+                    } ?: run {
+                        error = AccountRequestError(600, "Request response undefined")
+                    }
+                }
+            }
+            response.second?.let {
+                error = AccountRequestError(600, it.message)
+            }
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(flagsInformation, error)
         }
     }
     // endregion
