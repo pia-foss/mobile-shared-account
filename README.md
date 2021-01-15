@@ -4,9 +4,9 @@
 
 Private Internet Access is the world's leading consumer VPN service. At Private Internet Access we believe in unfettered access for all, and as a firm supporter of the open source ecosystem we have made the decision to open source our VPN clients. For more information about the PIA service, please visit our website [privateinternetaccess.com][pia-url] or check out the [Wiki][pia-wiki].
 
-# Regions common library for Android and Apple platforms
+# Account common library for Android and Apple platforms
 
-With this library, clients from iOS and Android can communicate easily with the Private Internet Access region's services.
+With this library, clients from iOS and Android can communicate easily with the Private Internet Access account's services.
 
 ## Installation
 
@@ -23,13 +23,13 @@ With this library, clients from iOS and Android can communicate easily with the 
 #### Download Codebase
 Using the terminal:
 
-`git clone https://github.com/pia-foss/mobile-common-regions.git *folder-name*`
+`git clone https://github.com/pia-foss/mobile-common-account.git *folder-name*`
 
 type in what folder you want to put in without the **
 
 #### Building
 
-Once the project is cloned, you can build the binaries by running `./gradlew bundleDebugAar` or `./gradlew bundleReleaseAar` for Android. And, `./gradlew iOSBinaries` for iOS. You can find the binaries at `[PROJECT_DIR]/regions/build/outputs/aar` and `[PROJECT_DIR]/regions/build/bin/iOS` accordingly
+Once the project is cloned, you can build the binaries by running `./gradlew bundleDebugAar` or `./gradlew bundleReleaseAar` for Android. And, `./gradlew iOSBinaries` for iOS. You can find the binaries at `[PROJECT_DIR]/build/outputs/aar` and `[PROJECT_DIR]/build/bin/iOS` accordingly
 
 ## Usage
 
@@ -47,13 +47,13 @@ implementation 'org.jetbrains.kotlinx:kotlinx-serialization-core:x.x.x'
 
 To use this project in your iOS apps, just add the library as a pod
 
-`pod "PIARegions", :git => "http://github.com/pia-foss/mobile-common-regions`
+`pod "PIAAccount", :git => "http://github.com/pia-foss/mobile-common-account`
 
-After the pod install is completed, when you run your app, the PIARegions pod will generate the `Regions.framework`.
+After the pod install is completed, when you run your app, the PIAAccount pod will generate the `PIAAccount.framework`.
 
 ### Add new classes or change iOS project structure
 
-When adding new classes or if you need to change the project structure of the `PIARegions` module you will need to update the `PIARegions.podspec` file. This file is located in the root path of the project.
+When adding new classes or if you need to change the project structure of the `PIAAccount` module you will need to update the `PIAAccountModule.podspec` file. This file is located in the root path of the project.
 
 ## Documentation
 
@@ -69,12 +69,9 @@ Code structure via packages:
 
 #### Significant Classes and Interfaces
 
-* `RegionsBuilder` - Public builder class responsible for creating an instance of an object conforming to the `RegionsAPI` interface for the client side.
-* `RegionsCommonBuilder` - Internal builder class responsible for creating an instance of an object conforming to the `RegionsAPI` interface and injecting the platform specific dependencies.
-* `RegionsAPI` - Public interface defining the API to be offered by the library to the clients.
-* `RegionsResponse` - Public data class representing the serialized data from our regions service.
-* `MessageVerificationHandler` - Handler conforming to the interface `MessageVerificator` and providing the defined capabilities to the common logic.
-* `PingRequestHandler` - Handler conforming to the interface `PingRequest` and providing the defined capabilities to the common logic.
+* `AccountBuilder` - Public builder class responsible for creating an instance of an object conforming to either the `IOSAccountAPI` or `AndroidAccountAPI` interface for the client side.
+* `AccountAPI` - Public interfaces defining the API to be offered by the library to the clients.
+* `AccountHttpClient` - Class defining the certificate pinning logic on each platform.
 
 ## Contributing
 

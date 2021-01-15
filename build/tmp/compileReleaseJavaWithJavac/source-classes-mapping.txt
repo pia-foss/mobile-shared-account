@@ -1,2 +1,0 @@
-com/privateinternetaccess/regions/BuildConfig.java
- com.privateinternetaccess.regions.BuildConfig
