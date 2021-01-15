@@ -1,0 +1,59 @@
+image: openjdk:8-jdk
+
+variables:
+  ANDROID_COMPILE_SDK: "28"
+  ANDROID_BUILD_TOOLS: "30.0.0"
+  ANDROID_SDK_TOOLS:   "4333796"
+  GIT_SUBMODULE_STRATEGY: normal
+
+cache:
+  key: ${CI_BUILD_REF_NAME}
+  paths:
+    - .gradle/
+    - /builds/android/app-android/app/.cxx
+    - /builds/android/app-android/openvpnTunnel/.cxx
+
+before_script:
+  - git submodule sync --recursive
+  - git submodule update --init --recursive
+  # setup android
+  - apt-get --quiet update --yes
+  - apt-get --quiet install --yes wget build-essential tar unzip lib32stdc++6 lib32z1
+  - wget --quiet --output-document=android-sdk.zip https://dl.google.com/android/repository/sdk-tools-linux-${ANDROID_SDK_TOOLS}.zip
+  - unzip -o -q -d android-sdk-linux android-sdk.zip
+  - echo y | android-sdk-linux/tools/bin/sdkmanager "platforms;android-${ANDROID_COMPILE_SDK}" >/dev/null
+  - echo y | android-sdk-linux/tools/bin/sdkmanager "platform-tools" >/dev/null
+  - echo y | android-sdk-linux/tools/bin/sdkmanager "build-tools;${ANDROID_BUILD_TOOLS}" >/dev/null
+  - export ANDROID_HOME=$PWD/android-sdk-linux
+  - export PATH=$PATH:$PWD/android-sdk-linux/platform-tools/ 
+  - chmod +x ./gradlew
+  # temporarily disable checking for EPIPE error and use yes to accept all licenses
+  - set +o pipefail
+  - yes | android-sdk-linux/tools/bin/sdkmanager --licenses > /dev/null
+  - set -o pipefail
+  
+stages:
+  - build
+  - test
+
+build:
+  stage: build
+  script:
+    - ./gradlew bundleDebugAar
+    - ./gradlew bundleReleaseAar
+    - ./gradlew iOSBinaries
+  artifacts:
+    when: always
+    paths:
+      - "regions/build/outputs/aar/*aar"
+      - "regions/build/bin/iOS/*Framework"
+
+tests:
+  stage: test
+  script:
+    - ./gradlew test
+  artifacts:
+    when: always
+    paths:
+    - "*/build/reports/lint-results.html"
+    - "*/build/reports/tests/*"
