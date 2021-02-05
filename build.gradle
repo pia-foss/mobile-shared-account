@@ -41,7 +41,7 @@ android {
 }
 
 kotlin {
-    version = "1.1.0"
+    version = "1.1.1"
     cocoapods {
         summary = "PIAAccount Module"
         homepage = "https://www.privateinternetaccess.com"

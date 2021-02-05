@@ -120,6 +120,7 @@ internal open class Account(
         REDEEM("/api/client/giftcard_redeem"),
         MESSAGES("/api/client/v2/messages"),
         DEDICATED_IP("/api/client/v2/dedicated_ip"),
+        RENEW_DEDICATED_IP("/api/client/v2/check_renew_dip"),
         ANDROID_FEATURE_FLAG("/clients/desktop/android-flags"),
         IOS_FEATURE_FLAG("/clients/desktop/ios-flags")
     }
@@ -162,12 +163,22 @@ internal open class Account(
     }
 
     override fun dedicatedIPs(
-        token: String,
+        authToken: String,
         ipTokens: List<String>,
         callback: (details: List<DedicatedIPInformation>, error: AccountRequestError?) -> Unit
     ) {
         launch {
-            dedicatedIPsAsync(token, ipTokens, clientStateProvider.accountEndpoints(), callback)
+            dedicatedIPsAsync(authToken, ipTokens, clientStateProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun renewDedicatedIP(
+        authToken: String,
+        ipToken: String,
+        callback: (error: AccountRequestError?) -> Unit
+    ) {
+        launch {
+            renewDedicatedIPAsync(authToken, ipToken, clientStateProvider.accountEndpoints(), callback)
         }
     }
 
@@ -446,7 +457,7 @@ internal open class Account(
     }
 
     private fun dedicatedIPsAsync(
-        token: String,
+        authToken: String,
         ipTokens: List<String>,
         endpoints: List<AccountEndpoint>,
         callback: (details: List<DedicatedIPInformation>, error: AccountRequestError?) -> Unit
@@ -466,7 +477,7 @@ internal open class Account(
             }
             val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
                 url("https://${accountEndpoint.endpoint}${Endpoint.DEDICATED_IP.url}")
-                header("Authorization", "Token $token")
+                header("Authorization", "Token $authToken")
                 contentType(ContentType.Application.Json)
                 body = json.encodeToString(DedicatedIPRequest.serializer(), DedicatedIPRequest(ipTokens))
             }
@@ -502,6 +513,50 @@ internal open class Account(
 
         withContext(Dispatchers.Main) {
             callback(dedicatedIPsInformation, error)
+        }
+    }
+
+    private fun renewDedicatedIPAsync(
+        authToken: String,
+        ipToken: String,
+        endpoints: List<AccountEndpoint>,
+        callback: (error: AccountRequestError?) -> Unit
+    ) = async {
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
+        for (accountEndpoint in endpoints) {
+            error = null
+            val client = if (accountEndpoint.usePinnedCertificate) {
+                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
+                url("https://${accountEndpoint.endpoint}${Endpoint.RENEW_DEDICATED_IP.url}")
+                header("Authorization", "Token $authToken")
+                parameter("token", ipToken)
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    error = AccountRequestError(it.status.value, it.status.description)
+                }
+            }
+            response.second?.let {
+                error = AccountRequestError(600, it.message)
+            }
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(error)
         }
     }
 

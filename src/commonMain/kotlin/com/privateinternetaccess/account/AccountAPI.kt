@@ -70,14 +70,25 @@ public interface AccountAPI {
     fun accountDetails(token: String, callback: (details: AccountInformation?, error: AccountRequestError?) -> Unit)
 
     /**
-     * @param token `String`
-     * @param ipTokens `String`
+     * @param authToken `String`
+     * @param ipTokens `List<String>`
      * @param callback `(details: DedicatedIPInformation, error: AccountRequestError?) -> Unit`
      */
     fun dedicatedIPs(
-        token: String,
+        authToken: String,
         ipTokens: List<String>,
         callback: (details: List<DedicatedIPInformation>, error: AccountRequestError?) -> Unit
+    )
+
+    /**
+     * @param authToken `String`
+     * @param ipToken `String`
+     * @param callback `(details: DedicatedIPInformation, error: AccountRequestError?) -> Unit`
+     */
+    fun renewDedicatedIP(
+        authToken: String,
+        ipToken: String,
+        callback: (error: AccountRequestError?) -> Unit
     )
 
     /**
