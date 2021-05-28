@@ -20,6 +20,7 @@ package com.privateinternetaccess.account
 
 import com.privateinternetaccess.account.internals.AndroidAccount
 import com.privateinternetaccess.account.internals.IOSAccount
+import com.privateinternetaccess.account.model.response.LoginResponse
 import com.privateinternetaccess.account.model.request.AndroidSignupInformation
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation
 import com.privateinternetaccess.account.model.request.IOSSignupInformation
@@ -49,12 +50,12 @@ public interface AccountAPI {
     /**
      * @param username `String`
      * @param password `String`
-     * @param callback `(token: String?, error: AccountRequestError?) -> Unit`.
+     * @param callback `(response: LoginResponse?, error: AccountRequestError?) -> Unit`.
      */
     fun loginWithCredentials(
         username: String,
         password: String,
-        callback: (token: String?, error: AccountRequestError?) -> Unit
+        callback: (response: LoginResponse?, error: AccountRequestError?) -> Unit
     )
 
     /**
@@ -62,6 +63,12 @@ public interface AccountAPI {
      * @param callback `(error: AccountRequestError?) -> Unit`
      */
     fun logout(token: String, callback: (error: AccountRequestError?) -> Unit)
+
+    /**
+     * @param token `String`
+     * @param callback `(response: LoginResponse?, error: AccountRequestError?) -> Unit`.
+     */
+    fun refreshToken(token: String, callback: (response: LoginResponse?, error: AccountRequestError?) -> Unit)
 
     /**
      * @param token `String`

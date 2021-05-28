@@ -20,7 +20,7 @@ package com.privateinternetaccess.account.internals
 
 import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.IOSLoginReceiptRequest
-import com.privateinternetaccess.account.internals.model.response.LoginResponse
+import com.privateinternetaccess.account.model.response.LoginResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
 import com.privateinternetaccess.account.internals.utils.AccountUtils
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation

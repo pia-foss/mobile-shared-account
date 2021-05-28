@@ -20,13 +20,14 @@ package com.privateinternetaccess.account.internals
 
 import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.DedicatedIPRequest
-import com.privateinternetaccess.account.internals.model.response.LoginResponse
+import com.privateinternetaccess.account.model.response.LoginResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
 import com.privateinternetaccess.account.internals.utils.AccountUtils
 import com.privateinternetaccess.account.model.response.DedicatedIPInformationResponse.DedicatedIPInformation
 import com.privateinternetaccess.account.model.response.*
 import io.ktor.client.*
 import io.ktor.client.request.*
+import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
@@ -96,7 +97,8 @@ internal open class Account(
     internal val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
     internal enum class CommonMetaEndpoint(val url: String) {
-        LOGIN("/apiv2/token")
+        LOGIN("/apiv4/token"),
+        REFRESH_TOKEN("/apiv4/refresh"),
     }
 
     private enum class MetaEndpoint(val url: String) {
@@ -106,7 +108,8 @@ internal open class Account(
     }
 
     internal enum class CommonEndpoint(val url: String) {
-        LOGIN("/api/client/v2/token"),
+        LOGIN("/api/client/v4/token"),
+        REFRESH_TOKEN("/api/client/v4/refresh"),
         SIGNUP("/api/client/signup"),
         SET_EMAIL("/api/client/account"),
     }
@@ -140,7 +143,7 @@ internal open class Account(
     override fun loginWithCredentials(
         username: String,
         password: String,
-        callback: (token: String?, error: AccountRequestError?) -> Unit
+        callback: (response: LoginResponse?, error: AccountRequestError?) -> Unit
     ) {
         launch {
             loginWithCredentialsAsync(username, password, clientStateProvider.accountEndpoints(), callback)
@@ -150,6 +153,15 @@ internal open class Account(
     override fun logout(token: String, callback: (error: AccountRequestError?) -> Unit) {
         launch {
             logoutAsync(token, clientStateProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun refreshToken(
+        token: String,
+        callback: (response: LoginResponse?, error: AccountRequestError?) -> Unit
+    ) {
+        launch {
+            refreshTokenAsync(token, clientStateProvider.accountEndpoints(), callback)
         }
     }
 
@@ -272,9 +284,12 @@ internal open class Account(
                 subdomain = Endpoint.LOGIN_LINK.url
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
+
+            val formParameters = Parameters.build {
+                append("email", email)
+            }
+            val response = client.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
                 url("https://${accountEndpoint.endpoint}$subdomain")
-                parameter("email", email)
             }
 
             response.first?.let {
@@ -301,9 +316,9 @@ internal open class Account(
         username: String,
         password: String,
         endpoints: List<AccountEndpoint>,
-        callback: (token: String?, error: AccountRequestError?) -> Unit
+        callback: (response: LoginResponse?, error: AccountRequestError?) -> Unit
     ) = async {
-        var token: String? = null
+        var loginResponse: LoginResponse? = null
         var error: AccountRequestError? = null
         if (endpoints.isNullOrEmpty()) {
             error = AccountRequestError(600, "No available endpoints to perform the request")
@@ -319,19 +334,22 @@ internal open class Account(
                 subdomain = CommonEndpoint.LOGIN.url
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
+
+            val formParameters = Parameters.build {
+                append("username", username)
+                append("password", password)
+            }
+            val requestResponse = client.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
                 url("https://${accountEndpoint.endpoint}$subdomain")
-                parameter("username", username)
-                parameter("password", password)
             }
 
-            response.first?.let {
+            requestResponse.first?.let {
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
                     error = AccountRequestError(it.status.value, it.status.description)
                 } else {
                     it.content.readUTF8Line()?.let { content ->
                         try {
-                            token = json.decodeFromString(LoginResponse.serializer(), content).token
+                            loginResponse = json.decodeFromString(LoginResponse.serializer(), content)
                         } catch (exception: SerializationException) {
                             error = AccountRequestError(600, "Decode error $exception")
                         }
@@ -340,7 +358,7 @@ internal open class Account(
                     }
                 }
             }
-            response.second?.let {
+            requestResponse.second?.let {
                 error = AccountRequestError(600, it.message)
             }
 
@@ -351,7 +369,7 @@ internal open class Account(
         }
 
         withContext(Dispatchers.Main) {
-            callback(token, error)
+            callback(loginResponse, error)
         }
     }
 
@@ -375,6 +393,7 @@ internal open class Account(
                 subdomain = Endpoint.LOGOUT.url
                 AccountHttpClient.client()
             }
+
             val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
                 url("https://${accountEndpoint.endpoint}$subdomain")
                 header("Authorization", "Token $token")
@@ -397,6 +416,63 @@ internal open class Account(
 
         withContext(Dispatchers.Main) {
             callback(error)
+        }
+    }
+
+    private fun refreshTokenAsync(
+        token: String,
+        endpoints: List<AccountEndpoint>,
+        callback: (response: LoginResponse?, error: AccountRequestError?) -> Unit
+    ) = async {
+        var loginResponse: LoginResponse? = null
+        var error: AccountRequestError? = null
+        if (endpoints.isNullOrEmpty()) {
+            error = AccountRequestError(600, "No available endpoints to perform the request")
+        }
+
+        for (accountEndpoint in endpoints) {
+            error = null
+            var subdomain: String?
+            val client = if (accountEndpoint.usePinnedCertificate) {
+                subdomain = CommonMetaEndpoint.REFRESH_TOKEN.url
+                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+            } else {
+                subdomain = CommonEndpoint.REFRESH_TOKEN.url
+                AccountHttpClient.client()
+            }
+
+            val requestResponse = client.postCatching<Pair<HttpResponse?, Exception?>> {
+                url("https://${accountEndpoint.endpoint}$subdomain")
+                header("Authorization", "Token $token")
+            }
+
+            requestResponse.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    error = AccountRequestError(it.status.value, it.status.description)
+                } else {
+                    it.content.readUTF8Line()?.let { content ->
+                        try {
+                            loginResponse = json.decodeFromString(LoginResponse.serializer(), content)
+                        } catch (exception: SerializationException) {
+                            error = AccountRequestError(600, "Decode error $exception")
+                        }
+                    } ?: run {
+                        error = AccountRequestError(600, "Request response undefined")
+                    }
+                }
+            }
+            requestResponse.second?.let {
+                error = AccountRequestError(600, it.message)
+            }
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (error == null) {
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(loginResponse, error)
         }
     }
 
@@ -475,6 +551,7 @@ internal open class Account(
             } else {
                 AccountHttpClient.client()
             }
+
             val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
                 url("https://${accountEndpoint.endpoint}${Endpoint.DEDICATED_IP.url}")
                 header("Authorization", "Token $authToken")
@@ -534,10 +611,13 @@ internal open class Account(
             } else {
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
+
+            val formParameters = Parameters.build {
+                append("token", ipToken)
+            }
+            val response = client.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
                 url("https://${accountEndpoint.endpoint}${Endpoint.RENEW_DEDICATED_IP.url}")
                 header("Authorization", "Token $authToken")
-                parameter("token", ipToken)
             }
 
             response.first?.let {
@@ -632,11 +712,14 @@ internal open class Account(
             } else {
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
+
+            val formParameters = Parameters.build {
+                append("email", email)
+                append("reset_password", resetPassword.toString())
+            }
+            val response = client.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
                 url("https://${accountEndpoint.endpoint}${CommonEndpoint.SET_EMAIL.url}")
                 header("Authorization", "Token $token")
-                parameter("email", email)
-                parameter("reset_password", resetPassword)
             }
 
             response.first?.let {
@@ -688,11 +771,14 @@ internal open class Account(
             } else {
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
+
+            val formParameters = Parameters.build {
+                append("invitee_email", recipientEmail)
+                append("invitee_name", recipientName)
+            }
+            val response = client.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
                 url("https://${accountEndpoint.endpoint}${Endpoint.INVITES.url}")
                 header("Authorization", "Token $token")
-                parameter("invitee_email", recipientEmail)
-                parameter("invitee_name", recipientName)
             }
 
             response.first?.let {
@@ -788,10 +874,13 @@ internal open class Account(
             } else {
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
+
+            val formParameters = Parameters.build {
+                append("email", email)
+                append("pin", code)
+            }
+            val response = client.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
                 url("https://${accountEndpoint.endpoint}${Endpoint.REDEEM.url}")
-                parameter("email", email)
-                parameter("pin", code)
             }
 
             response.first?.let {
@@ -966,12 +1055,13 @@ internal open class Account(
     }
 
     internal suspend inline fun <reified T> HttpClient.postCatching(
+        formParameters: Parameters = Parameters.Empty,
         block: HttpRequestBuilder.() -> Unit = {}
-    ): Pair<HttpResponse?, Exception?> = request {
+    ): Pair<HttpResponse?, Exception?> {
         var exception: Exception? = null
         var response: HttpResponse? = null
         try {
-            response = request {
+            response = submitForm(formParameters = formParameters) {
                 method = HttpMethod.Post
                 userAgent(userAgentValue)
                 apply(block)
