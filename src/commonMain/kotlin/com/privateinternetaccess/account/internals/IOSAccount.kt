@@ -20,7 +20,7 @@ package com.privateinternetaccess.account.internals
 
 import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.IOSLoginReceiptRequest
-import com.privateinternetaccess.account.model.response.LoginResponse
+import com.privateinternetaccess.account.internals.model.response.ApiTokenResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
 import com.privateinternetaccess.account.internals.utils.AccountUtils
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation
@@ -37,22 +37,18 @@ import kotlinx.serialization.SerializationException
 
 
 internal class IOSAccount(
-    clientStateProvider: AccountClientStateProvider,
+    endpointsProvider: IAccountEndpointProvider,
+    certificate: String?,
     userAgentValue: String
-) : IOSAccountAPI, Account(clientStateProvider, userAgentValue, Platform.IOS) {
-
-    private enum class Endpoint(val url: String) {
-        PAYMENT("/api/client/payment"),
-        SUBSCRIPTIONS("/api/client/ios")
-    }
+) : IOSAccountAPI, Account(endpointsProvider, certificate, userAgentValue, Platform.IOS) {
 
     @InternalAPI
     override fun loginWithReceipt(
         receiptBase64: String,
-        callback: (token: String?, error: AccountRequestError?) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            loginWithReceiptAsync(receiptBase64, clientStateProvider.accountEndpoints(), callback)
+            loginWithReceiptAsync(receiptBase64, endpointsProvider.accountEndpoints(), callback)
         }
     }
 
@@ -62,10 +58,10 @@ internal class IOSAccount(
         password: String,
         email: String,
         resetPassword: Boolean,
-        callback: (temporaryPassword: String?, error: AccountRequestError?) -> Unit
+        callback: (temporaryPassword: String?, error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            setEmailAsync(username, password, email, resetPassword, clientStateProvider.accountEndpoints(), callback)
+            setEmailAsync(username, password, email, resetPassword, endpointsProvider.accountEndpoints(), callback)
         }
     }
 
@@ -74,116 +70,178 @@ internal class IOSAccount(
         username: String,
         password: String,
         information: IOSPaymentInformation,
-        callback: (error: AccountRequestError?) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            paymentAsync(username, password, information, clientStateProvider.accountEndpoints(), callback)
+            paymentAsync(username, password, information, endpointsProvider.accountEndpoints(), callback)
         }
     }
 
     override fun signUp(
         information: IOSSignupInformation,
-        callback: (details: SignUpInformation?, error: AccountRequestError?) -> Unit
+        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            signUpAsync(information, clientStateProvider.accountEndpoints(), callback)
+            signUpAsync(information, endpointsProvider.accountEndpoints(), callback)
         }
     }
 
     override fun subscriptions(
         receipt: String?,
-        callback: (details: IOSSubscriptionInformation?, error: AccountRequestError?) -> Unit
+        callback: (details: IOSSubscriptionInformation?, error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            subscriptionsAsync(receipt, clientStateProvider.accountEndpoints(), callback)
+            subscriptionsAsync(receipt, endpointsProvider.accountEndpoints(), callback)
         }
     }
     // endregion
 
     // region private
     @InternalAPI
-    private fun loginWithReceiptAsync(
+    private suspend fun loginWithReceiptAsync(
         receiptBase64: String,
         endpoints: List<AccountEndpoint>,
-        callback: (token: String?, error: AccountRequestError?) -> Unit
-    ) = async {
-        var token: String? = null
-        var error: AccountRequestError? = null
-        if (endpoints.isNullOrEmpty()) {
-            error = AccountRequestError(600, "No available endpoints to perform the request")
+        callback: (error: List<AccountRequestError>) -> Unit
+    ) {
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        if (endpoints.isEmpty()) {
+            listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
         }
 
-        for (accountEndpoint in endpoints) {
-            error = null
-            var subdomain: String?
-            val client = if (accountEndpoint.usePinnedCertificate) {
-                subdomain = CommonMetaEndpoint.LOGIN.url
-                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+        for (endpoint in endpoints) {
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
             } else {
-                subdomain = CommonEndpoint.LOGIN.url
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
-                url("https://${accountEndpoint.endpoint}$subdomain")
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.LOGIN)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.LOGIN.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
                 contentType(ContentType.Application.Json)
                 body = json.encodeToString(IOSLoginReceiptRequest.serializer(), IOSLoginReceiptRequest(receiptBase64))
             }
 
             response.first?.let {
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
-                    error = AccountRequestError(it.status.value, it.status.description)
+                    listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     it.content.readUTF8Line()?.let { content ->
                         try {
-                            token = json.decodeFromString(LoginResponse.serializer(), content).token
+                            val apiTokenResponse = json.decodeFromString(ApiTokenResponse.serializer(), content)
+                            persistence.persistApiTokenResponse(apiTokenResponse)
+                            refreshVpnToken(apiTokenResponse.apiToken, endpoints)
+                            succeeded = true
                         } catch (exception: SerializationException) {
-                            error = AccountRequestError(600, "Decode error $exception")
+                            listErrors.add(AccountRequestError(600, "Decode error $exception"))
                         }
                     } ?: run {
-                        error = AccountRequestError(600, "Request response undefined")
+                        listErrors.add(AccountRequestError(600, "Request response undefined"))
                     }
                 }
             }
             response.second?.let {
-                error = AccountRequestError(600, it.message)
+                listErrors.add(AccountRequestError(600, it.message))
             }
 
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
             // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
-            if (error == null) {
+            if (succeeded) {
+                listErrors.clear()
                 break
             }
         }
 
         withContext(Dispatchers.Main) {
-            callback(token, error)
+            callback(listErrors)
         }
     }
 
     @InternalAPI
-    private fun setEmailAsync(
+    private suspend fun setEmailAsync(
         username: String,
         password: String,
         email: String,
         resetPassword: Boolean,
         endpoints: List<AccountEndpoint>,
-        callback: (temporaryPassword: String?, error: AccountRequestError?) -> Unit
-    ) = async {
+        callback: (temporaryPassword: String?, error: List<AccountRequestError>) -> Unit
+    ) {
         var temporaryPassword: String? = null
-        var error: AccountRequestError? = null
-        if (endpoints.isNullOrEmpty()) {
-            error = AccountRequestError(600, "No available endpoints to perform the request")
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        if (endpoints.isEmpty()) {
+            listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
         }
 
-        for (accountEndpoint in endpoints) {
-            error = null
-            val auth = "$username:$password".encodeBase64()
-            val client = if (accountEndpoint.usePinnedCertificate) {
-                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+        for (endpoint in endpoints) {
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
             } else {
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
-                url("https://${accountEndpoint.endpoint}${CommonEndpoint.SET_EMAIL.url}")
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.SET_EMAIL)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SET_EMAIL.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val auth = "$username:$password".encodeBase64()
+            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
                 header("Authorization", "Basic $auth")
                 parameter("email", email)
                 parameter("reset_password", resetPassword)
@@ -191,156 +249,262 @@ internal class IOSAccount(
 
             response.first?.let {
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
-                    error = AccountRequestError(it.status.value, it.status.description)
+                    listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     it.content.readUTF8Line()?.let { content ->
                         try {
                             temporaryPassword = json.decodeFromString(SetEmailResponse.serializer(), content).password
+                            succeeded = true
                         } catch (exception: SerializationException) {
-                            error = AccountRequestError(600, "Decode error $exception")
+                            listErrors.add(AccountRequestError(600, "Decode error $exception"))
                         }
                     } ?: run {
-                        error = AccountRequestError(600, "Request response undefined")
+                        listErrors.add(AccountRequestError(600, "Request response undefined"))
                     }
                 }
             }
             response.second?.let {
-                error = AccountRequestError(600, it.message)
+                listErrors.add(AccountRequestError(600, it.message))
             }
 
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
             // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
-            if (error == null) {
+            if (succeeded) {
+                listErrors.clear()
                 break
             }
         }
 
         withContext(Dispatchers.Main) {
-            callback(temporaryPassword, error)
+            callback(temporaryPassword, listErrors)
         }
     }
 
     @InternalAPI
-    private fun paymentAsync(
+    private suspend fun paymentAsync(
         username: String,
         password: String,
         information: IOSPaymentInformation,
         endpoints: List<AccountEndpoint>,
-        callback: (error: AccountRequestError?) -> Unit
-    ) = async {
-        var error: AccountRequestError? = null
-        if (endpoints.isNullOrEmpty()) {
-            error = AccountRequestError(600, "No available endpoints to perform the request")
+        callback: (error: List<AccountRequestError>) -> Unit
+    ) {
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        if (endpoints.isEmpty()) {
+            listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
         }
 
-        for (accountEndpoint in endpoints) {
-            error = null
-            val auth = "$username:$password".encodeBase64()
-            val client = if (accountEndpoint.usePinnedCertificate) {
-                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+        for (endpoint in endpoints) {
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
             } else {
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
-                url("https://${accountEndpoint.endpoint}${Endpoint.PAYMENT.url}")
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.IOS_PAYMENT)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.IOS_PAYMENT.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val auth = "$username:$password".encodeBase64()
+            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
                 contentType(ContentType.Application.Json)
                 header("Authorization", "Basic $auth")
                 body = json.encodeToString(IOSPaymentInformation.serializer(), information)
             }
 
             response.first?.let {
+                succeeded = AccountUtils.isErrorStatusCode(it.status.value).not()
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
-                    error = AccountRequestError(it.status.value, it.status.description)
+                    listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 }
             }
             response.second?.let {
-                error = AccountRequestError(600, it.message)
+                listErrors.add(AccountRequestError(600, it.message))
             }
 
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
             // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
-            if (error == null) {
+            if (succeeded) {
+                listErrors.clear()
                 break
             }
         }
 
         withContext(Dispatchers.Main) {
-            callback(error)
+            callback(listErrors)
         }
     }
 
-    private fun signUpAsync(
+    private suspend fun signUpAsync(
         information: IOSSignupInformation,
         endpoints: List<AccountEndpoint>,
-        callback: (details: SignUpInformation?, error: AccountRequestError?) -> Unit
-    ) = async {
+        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+    ) {
         var signUpInformation: SignUpInformation? = null
-        var error: AccountRequestError? = null
-        if (endpoints.isNullOrEmpty()) {
-            error = AccountRequestError(600, "No available endpoints to perform the request")
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        if (endpoints.isEmpty()) {
+            listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
         }
 
-        for (accountEndpoint in endpoints) {
-            error = null
-            val client = if (accountEndpoint.usePinnedCertificate) {
-                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+        for (endpoint in endpoints) {
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
             } else {
                 AccountHttpClient.client()
             }
-            val response = client.postCatching<Pair<HttpResponse?, Exception?>> {
-                url("https://${accountEndpoint.endpoint}${CommonEndpoint.SIGNUP.url}")
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.SIGNUP)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SIGNUP.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
                 contentType(ContentType.Application.Json)
                 body = json.encodeToString(IOSSignupInformation.serializer(), information)
             }
 
             response.first?.let {
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
-                    error = AccountRequestError(it.status.value, it.status.description)
+                    listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     it.content.readUTF8Line()?.let { content ->
                         try {
                             signUpInformation = json.decodeFromString(SignUpInformation.serializer(), content)
+                            succeeded = true
                         } catch (exception: SerializationException) {
-                            error = AccountRequestError(600, "Decode error $exception")
+                            listErrors.add(AccountRequestError(600, "Decode error $exception"))
                         }
                     } ?: run {
-                        error = AccountRequestError(600, "Request response undefined")
+                        listErrors.add(AccountRequestError(600, "Request response undefined"))
                     }
                 }
             }
             response.second?.let {
-                error = AccountRequestError(600, it.message)
+                listErrors.add(AccountRequestError(600, it.message))
             }
 
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
             // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
-            if (error == null) {
+            if (succeeded) {
+                listErrors.clear()
                 break
             }
         }
 
         withContext(Dispatchers.Main) {
-            callback(signUpInformation, error)
+            callback(signUpInformation, listErrors)
         }
     }
 
-    private fun subscriptionsAsync(
+    private suspend fun subscriptionsAsync(
         receipt: String?,
         endpoints: List<AccountEndpoint>,
-        callback: (details: IOSSubscriptionInformation?, error: AccountRequestError?) -> Unit
-    ) = async {
+        callback: (details: IOSSubscriptionInformation?, error: List<AccountRequestError>) -> Unit
+    ) {
         var subscriptionsInformation: IOSSubscriptionInformation? = null
-        var error: AccountRequestError? = null
-        if (endpoints.isNullOrEmpty()) {
-            error = AccountRequestError(600, "No available endpoints to perform the request")
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        if (endpoints.isEmpty()) {
+            listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
         }
 
-        for (accountEndpoint in endpoints) {
-            error = null
-            val client = if (accountEndpoint.usePinnedCertificate) {
-                AccountHttpClient.client(Pair(accountEndpoint.endpoint, accountEndpoint.certificateCommonName!!))
+        refreshTokensIfNeeded(endpoints)
+        for (endpoint in endpoints) {
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
             } else {
                 AccountHttpClient.client()
             }
-            val response = client.getCatching<Pair<HttpResponse?, Exception?>> {
-                url("https://${accountEndpoint.endpoint}${Endpoint.SUBSCRIPTIONS.url}")
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.IOS_SUBSCRIPTIONS)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.IOS_SUBSCRIPTIONS.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.getCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
                 parameter("type", "subscription")
                 if (receipt != null) {
                     parameter("receipt", receipt)
@@ -349,32 +513,38 @@ internal class IOSAccount(
 
             response.first?.let {
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
-                    error = AccountRequestError(it.status.value, it.status.description)
+                    listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     it.content.readUTF8Line()?.let { content ->
                         try {
                             subscriptionsInformation =
                                 json.decodeFromString(IOSSubscriptionInformation.serializer(), content)
+                            succeeded = true
                         } catch (exception: SerializationException) {
-                            error = AccountRequestError(600, "Decode error $exception")
+                            listErrors.add(AccountRequestError(600, "Decode error $exception"))
                         }
                     } ?: run {
-                        error = AccountRequestError(600, "Request response undefined")
+                        listErrors.add(AccountRequestError(600, "Request response undefined"))
                     }
                 }
             }
             response.second?.let {
-                error = AccountRequestError(600, it.message)
+                listErrors.add(AccountRequestError(600, it.message))
             }
 
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
             // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
-            if (error == null) {
+            if (succeeded) {
+                listErrors.clear()
                 break
             }
         }
 
         withContext(Dispatchers.Main) {
-            callback(subscriptionsInformation, error)
+            callback(subscriptionsInformation, listErrors)
         }
     }
     // endregion

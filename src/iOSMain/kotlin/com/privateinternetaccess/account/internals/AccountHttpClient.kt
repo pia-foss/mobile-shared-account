@@ -28,32 +28,47 @@ import platform.Foundation.*
 import platform.Security.*
 
 
-actual object AccountHttpClient {
-    actual fun client(pinnedEndpoint: Pair<String, String>?) = HttpClient(Ios) {
-        expectSuccess = false
-        install(HttpTimeout) {
-            requestTimeoutMillis = Account.REQUEST_TIMEOUT_MS
-        }
-        pinnedEndpoint?.let {
-            engine {
-                handleChallenge(AccountCertificatePinner(pinnedEndpoint.first, pinnedEndpoint.second))
+internal actual object AccountHttpClient {
+
+    actual fun client(
+        certificate: String?,
+        pinnedEndpoint: Pair<String, String>?
+    ): Pair<HttpClient?, Exception?> {
+        return Pair(HttpClient(Ios) {
+            expectSuccess = false
+            install(HttpTimeout) {
+                requestTimeoutMillis = Account.REQUEST_TIMEOUT_MS
             }
-        }
+
+            if (certificate != null && pinnedEndpoint != null) {
+                engine {
+                    handleChallenge(
+                        AccountCertificatePinner(
+                            certificate,
+                            pinnedEndpoint.first,
+                            pinnedEndpoint.second
+                        )
+                    )
+                }
+            }
+        }, null)
     }
 }
 
-private class AccountCertificatePinner(private val hostname: String, private val commonName: String) : ChallengeHandler {
+private class AccountCertificatePinner(
+    certificate: String,
+    private val hostname: String,
+    private val commonName: String
+) : ChallengeHandler {
 
-    companion object {
-        private val certificateData = NSData.create(
-                base64EncodedString =
-                Account.certificate
-                        .replace("-----BEGIN CERTIFICATE-----", "")
-                        .replace("-----END CERTIFICATE-----", "")
-                        .replace("\n", ""),
-                options = NSDataBase64Encoding64CharacterLineLength
-        )
-    }
+    private val certificateData = NSData.create(
+        base64EncodedString =
+        certificate
+            .replace("-----BEGIN CERTIFICATE-----", "")
+            .replace("-----END CERTIFICATE-----", "")
+            .replace("\n", ""),
+        options = NSDataBase64Encoding64CharacterLineLength
+    )
 
     override fun invoke(
         session: NSURLSession,

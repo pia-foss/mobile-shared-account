@@ -26,6 +26,7 @@ import org.spongycastle.asn1.x500.X500Name
 import org.spongycastle.asn1.x500.style.BCStyle
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.lang.IllegalStateException
 import java.security.*
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
@@ -36,60 +37,85 @@ import javax.net.ssl.*
 import javax.security.auth.x500.X500Principal
 
 
-actual object AccountHttpClient {
-    actual fun client(pinnedEndpoint: Pair<String, String>?) = HttpClient(OkHttp) {
-        expectSuccess = false
-        install(HttpTimeout) {
-            requestTimeoutMillis = Account.REQUEST_TIMEOUT_MS
-        }
-        pinnedEndpoint?.let {
-            engine {
-                preconfigured = AccountCertificatePinner.getOkHttpClient(pinnedEndpoint.first, pinnedEndpoint.second)
+internal actual object AccountHttpClient {
+
+    actual fun client(
+        certificate: String?,
+        pinnedEndpoint: Pair<String, String>?
+    ) : Pair<HttpClient?, Exception?> {
+        var httpClient: HttpClient? = null
+        var exception: Exception? = null
+        try {
+            httpClient = HttpClient(OkHttp) {
+                expectSuccess = false
+                install(HttpTimeout) {
+                    requestTimeoutMillis = Account.REQUEST_TIMEOUT_MS
+                }
+
+                if (certificate != null && pinnedEndpoint != null) {
+                    engine {
+                        preconfigured = AccountCertificatePinner.getOkHttpClient(
+                            certificate,
+                            pinnedEndpoint.first,
+                            pinnedEndpoint.second
+                        )
+                    }
+                }
             }
+        } catch (e: KeyStoreException) {
+            exception = e
+        } catch (e: IOException) {
+            exception = e
+        } catch (e: CertificateException) {
+            exception = e
+        } catch (e: NoSuchAlgorithmException) {
+            exception = e
+        } catch (e: KeyManagementException) {
+            exception = e
+        } catch (e: IllegalStateException) {
+            exception = e
+        } catch (e: Throwable) {
+            val exceptionName = e::class.simpleName ?: "Unknown Exception Name"
+            exception = Exception(exceptionName)
         }
+        return Pair(httpClient, exception)
     }
 }
 
 private class AccountCertificatePinner {
 
     companion object {
-        fun getOkHttpClient(requestHostname: String, commonName: String): OkHttpClient {
-            var trustManager: X509TrustManager? = null
-            var sslSocketFactory: SSLSocketFactory? = null
-            val builder = OkHttpClient.Builder()
-            try {
-                val keyStore = KeyStore.getInstance("AndroidKeyStore")
-                keyStore.load(null)
-                val inputStream = Account.certificate.toByteArray().inputStream()
-                val certificateFactory = CertificateFactory.getInstance("X.509")
-                val certificate = certificateFactory.generateCertificate(inputStream)
-                keyStore.setCertificateEntry("pia", certificate)
-                inputStream.close()
-                val trustManagerFactory =
-                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-                trustManagerFactory.init(keyStore)
-                val trustManagers = trustManagerFactory.trustManagers
-                check(!(trustManagers.size != 1 || trustManagers[0] !is X509TrustManager)) {
-                    "Unexpected default trust managers:" + Arrays.toString(trustManagers)
-                }
-                trustManager = trustManagers[0] as X509TrustManager
-                val sslContext = SSLContext.getInstance("SSL")
-                sslContext.init(null, trustManagers, SecureRandom())
-                sslSocketFactory = sslContext.socketFactory
-            } catch (e: KeyStoreException) {
-                e.printStackTrace()
-            } catch (e: IOException) {
-                e.printStackTrace()
-            } catch (e: CertificateException) {
-                e.printStackTrace()
-            } catch (e: NoSuchAlgorithmException) {
-                e.printStackTrace()
-            } catch (e: KeyManagementException) {
-                e.printStackTrace()
-            }
-            builder.connectTimeout(Account.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
 
-            if (trustManager != null && sslSocketFactory != null) {
+        @Throws(
+            KeyStoreException::class,
+            IOException::class,
+            CertificateException::class,
+            NoSuchAlgorithmException::class,
+            KeyManagementException::class,
+            IllegalStateException::class
+        )
+        fun getOkHttpClient(certificate: String, requestHostname: String, commonName: String): OkHttpClient {
+            val builder = OkHttpClient.Builder()
+            val keyStore = KeyStore.getInstance("BKS")
+            keyStore.load(null)
+            val inputStream = certificate.toByteArray().inputStream()
+            val certificateFactory = CertificateFactory.getInstance("X.509")
+            val certificateObject = certificateFactory.generateCertificate(inputStream)
+            keyStore.setCertificateEntry("account", certificateObject)
+            inputStream.close()
+            val trustManagerFactory =
+                TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            trustManagerFactory.init(keyStore)
+            val trustManagers = trustManagerFactory.trustManagers
+            check(!(trustManagers.size != 1 || trustManagers[0] !is X509TrustManager)) {
+                "Unexpected default trust managers:" + Arrays.toString(trustManagers)
+            }
+            val trustManager = trustManagers[0] as X509TrustManager
+            val sslContext = SSLContext.getInstance("SSL")
+            sslContext.init(null, trustManagers, SecureRandom())
+            val sslSocketFactory = sslContext.socketFactory
+            builder.connectTimeout(Account.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            if (sslSocketFactory != null) {
                 builder.sslSocketFactory(sslSocketFactory, trustManager)
             }
             builder.hostnameVerifier(AccountHostnameVerifier(trustManager, requestHostname, commonName))

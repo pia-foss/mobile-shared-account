@@ -16,28 +16,20 @@
  *  Internet Access Mobile Client.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.privateinternetaccess.account.model.request
+package com.privateinternetaccess.account.internals.model.response
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 
 @Serializable
-data class AndroidSignupInformation(
-    @SerialName("store")
-    internal val store: String,
-    @SerialName("receipt")
-    val receipt: Receipt,
-    @SerialName("marketing")
-    val marketing: String? = null
-) {
-    @Serializable
-    data class Receipt(
-        @SerialName("order_id")
-        val orderId: String,
-        @SerialName("token")
-        val token: String,
-        @SerialName("product_id")
-        val sku: String
-    )
-}
+internal data class ApiTokenResponse(
+    @SerialName("api_token")
+    val apiToken: String,
+
+    /**
+     * ISO 8601 string representation.
+     */
+    @SerialName("expires_at")
+    val expiresAt: String
+)

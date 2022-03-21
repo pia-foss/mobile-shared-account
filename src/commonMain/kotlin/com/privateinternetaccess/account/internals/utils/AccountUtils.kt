@@ -18,8 +18,16 @@
 
 package com.privateinternetaccess.account.internals.utils
 
+import com.privateinternetaccess.account.internals.Account
+
 
 object AccountUtils {
+
+    private val DOMAIN_REGEX = Regex("^((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+[A-Za-z]{2,6}$")
+    private val IPV4_REGEX = Regex("^(([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\\.(?!$)|$)){4}$")
+    private const val STAGING_DOMAIN = "staging"
+    private const val SCHEME = "https"
+
     internal fun isErrorStatusCode(code: Int): Boolean {
         when (code) {
             in 300..399 ->
@@ -39,4 +47,35 @@ object AccountUtils {
         }
         return false
     }
+
+    internal fun prepareRequestUrl(ipOrRootDomain: String, path: Account.Path): String? {
+        // If it's not recognized as ip or domain. Return.
+        if (!ipOrRootDomain.matches(DOMAIN_REGEX) && !ipOrRootDomain.matches(IPV4_REGEX)) {
+            return null
+        }
+
+        // If it's a domain but there is no subdomain definition. Return.
+        if (ipOrRootDomain.matches(DOMAIN_REGEX) && !containsSubdomainForPath(path)) {
+            return null
+        }
+
+        return when {
+            // Order matters. The staging check needs to be prior the domain check as staging is technically a domain.
+            // But, we don't want to apply the subdomain to it and rather use it as it is.
+            ipOrRootDomain.contains(STAGING_DOMAIN) ||
+            ipOrRootDomain.matches(IPV4_REGEX) -> {
+                "$SCHEME://$ipOrRootDomain${path.url}"
+            }
+            ipOrRootDomain.matches(DOMAIN_REGEX) -> {
+                val subdomain = Account.SUBDOMAINS.getValue(path)
+                "$SCHEME://$subdomain.$ipOrRootDomain${path.url}"
+            }
+            else -> null
+        }
+    }
+
+    // region private
+    private fun containsSubdomainForPath(path: Account.Path) =
+        Account.SUBDOMAINS.containsKey(path)
+    // endregion
 }

@@ -1,5 +1,7 @@
+package com.privateinternetaccess.account.internals
+
 /*
- *  Copyright (c) 2020 Private Internet Access, Inc.
+ *  Copyright (c) 2021 Private Internet Access, Inc.
  *
  *  This file is part of the Private Internet Access Mobile Client.
  *
@@ -16,28 +18,15 @@
  *  Internet Access Mobile Client.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.privateinternetaccess.account.model.request
-
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import android.content.Context
 
 
-@Serializable
-data class AndroidSignupInformation(
-    @SerialName("store")
-    internal val store: String,
-    @SerialName("receipt")
-    val receipt: Receipt,
-    @SerialName("marketing")
-    val marketing: String? = null
-) {
-    @Serializable
-    data class Receipt(
-        @SerialName("order_id")
-        val orderId: String,
-        @SerialName("token")
-        val token: String,
-        @SerialName("product_id")
-        val sku: String
-    )
+object AccountContextProvider {
+
+    @Volatile
+    internal var applicationContext: Context? = null
+
+    internal fun context(context: Context) {
+        applicationContext = context
+    }
 }

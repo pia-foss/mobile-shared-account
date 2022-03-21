@@ -1,5 +1,7 @@
+package com.privateinternetaccess.account.internals.model.response
+
 /*
- *  Copyright (c) 2020 Private Internet Access, Inc.
+ *  Copyright (c) 2021 Private Internet Access, Inc.
  *
  *  This file is part of the Private Internet Access Mobile Client.
  *
@@ -16,28 +18,21 @@
  *  Internet Access Mobile Client.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.privateinternetaccess.account.model.request
-
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 
 @Serializable
-data class AndroidSignupInformation(
-    @SerialName("store")
-    internal val store: String,
-    @SerialName("receipt")
-    val receipt: Receipt,
-    @SerialName("marketing")
-    val marketing: String? = null
-) {
-    @Serializable
-    data class Receipt(
-        @SerialName("order_id")
-        val orderId: String,
-        @SerialName("token")
-        val token: String,
-        @SerialName("product_id")
-        val sku: String
-    )
-}
+internal data class VpnTokenResponse(
+    @SerialName("vpn_secret1")
+    val vpnUsernameToken: String,
+
+    @SerialName("vpn_secret2")
+    val vpnPasswordToken: String,
+
+    /**
+     * ISO 8601 string representation.
+     */
+    @SerialName("expires_at")
+    val expiresAt: String
+)

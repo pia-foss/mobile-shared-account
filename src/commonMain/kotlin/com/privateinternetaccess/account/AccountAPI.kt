@@ -20,7 +20,6 @@ package com.privateinternetaccess.account
 
 import com.privateinternetaccess.account.internals.AndroidAccount
 import com.privateinternetaccess.account.internals.IOSAccount
-import com.privateinternetaccess.account.model.response.LoginResponse
 import com.privateinternetaccess.account.model.request.AndroidSignupInformation
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation
 import com.privateinternetaccess.account.model.request.IOSSignupInformation
@@ -42,134 +41,127 @@ public enum class Platform {
 public interface AccountAPI {
 
     /**
-     * @param email `String`
-     * @param callback `(error: AccountRequestError?) -> Unit`
+     * @return `String?`
      */
-    fun loginLink(email: String, callback: (error: AccountRequestError?) -> Unit)
+    fun apiToken(): String?
+
+    /**
+     * @return `String?`
+     */
+    fun vpnToken(): String?
+
+    /**
+     * @param apiToken `String`
+     * @param callback `(error: List<AccountRequestError>) -> Unit`
+     */
+    fun migrateApiToken(apiToken: String, callback: (error: List<AccountRequestError>) -> Unit)
+
+    /**
+     * @param email `String`
+     * @param callback `(error: List<AccountRequestError>) -> Unit`
+     */
+    fun loginLink(email: String, callback: (error: List<AccountRequestError>) -> Unit)
 
     /**
      * @param username `String`
      * @param password `String`
-     * @param callback `(response: LoginResponse?, error: AccountRequestError?) -> Unit`.
+     * @param callback `(error: List<AccountRequestError>) -> Unit`
      */
     fun loginWithCredentials(
         username: String,
         password: String,
-        callback: (response: LoginResponse?, error: AccountRequestError?) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     )
 
     /**
-     * @param token `String`
-     * @param callback `(error: AccountRequestError?) -> Unit`
+     * @param callback `(error: List<AccountRequestError>) -> Unit`
      */
-    fun logout(token: String, callback: (error: AccountRequestError?) -> Unit)
+    fun logout(callback: (error: List<AccountRequestError>) -> Unit)
 
     /**
-     * @param token `String`
-     * @param callback `(response: LoginResponse?, error: AccountRequestError?) -> Unit`.
+     * @param callback `(details: AccountInformation, error: List<AccountRequestError>) -> Unit`
      */
-    fun refreshToken(token: String, callback: (response: LoginResponse?, error: AccountRequestError?) -> Unit)
+    fun accountDetails(callback: (details: AccountInformation?, error: List<AccountRequestError>) -> Unit)
 
     /**
-     * @param token `String`
-     * @param callback `(details: AccountInformation, error: AccountRequestError?) -> Unit`
+     * @param callback `(error: List<AccountRequestError>) -> Unit`
      */
-    fun accountDetails(token: String, callback: (details: AccountInformation?, error: AccountRequestError?) -> Unit)
+    fun deleteAccount(callback: (error: List<AccountRequestError>) -> Unit)
 
     /**
-     * @param authToken `String`
      * @param ipTokens `List<String>`
-     * @param callback `(details: DedicatedIPInformation, error: AccountRequestError?) -> Unit`
+     * @param callback `(details: DedicatedIPInformation, error: List<AccountRequestError>) -> Unit`
      */
     fun dedicatedIPs(
-        authToken: String,
         ipTokens: List<String>,
-        callback: (details: List<DedicatedIPInformation>, error: AccountRequestError?) -> Unit
+        callback: (details: List<DedicatedIPInformation>, error: List<AccountRequestError>) -> Unit
     )
 
     /**
-     * @param authToken `String`
      * @param ipToken `String`
-     * @param callback `(details: DedicatedIPInformation, error: AccountRequestError?) -> Unit`
+     * @param callback `(details: DedicatedIPInformation, error: List<AccountRequestError>) -> Unit`
      */
     fun renewDedicatedIP(
-        authToken: String,
         ipToken: String,
-        callback: (error: AccountRequestError?) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     )
 
     /**
-     * @param callback `(status: ClientStatusInformation?, error: AccountRequestError?) -> Unit`
+     * @param callback `(status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit`
      */
-    fun clientStatus(callback: (status: ClientStatusInformation?, error: AccountRequestError?) -> Unit)
+    fun clientStatus(callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit)
 
     /**
-     * @param token `String`
      * @param email `String`
      * @param resetPassword `Boolean`
-     * @param callback `(temporaryPassword: String, error: AccountRequestError?) -> Unit`
+     * @param callback `(temporaryPassword: String, error: List<AccountRequestError>) -> Unit`
      */
     fun setEmail(
-        token: String,
         email: String,
         resetPassword: Boolean,
-        callback: (temporaryPassword: String?, error: AccountRequestError?) -> Unit
+        callback: (temporaryPassword: String?, error: List<AccountRequestError>) -> Unit
     )
 
     /**
-     * @param token `String`
      * @param recipientEmail `String`
      * @param recipientName `String`
-     * @param callback `(error: AccountRequestError?) -> Unit`
+     * @param callback `(error: List<AccountRequestError>) -> Unit`
      */
     fun sendInvite(
-        token: String,
         recipientEmail: String,
         recipientName: String,
-        callback: (error: AccountRequestError?) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     )
 
     /**
-     * @param token `String`
-     * @param callback `(details: InvitesDetailsInformation?, error: AccountRequestError?) -> Unit -> Unit`
+     * @param callback `(details: InvitesDetailsInformation?, error: List<AccountRequestError>) -> Unit -> Unit`
      */
-    fun invitesDetails(
-        token: String,
-        callback: (details: InvitesDetailsInformation?, error: AccountRequestError?) -> Unit
-    )
+    fun invitesDetails(callback: (details: InvitesDetailsInformation?, error: List<AccountRequestError>) -> Unit)
 
     /**
      * @param email `String`
      * @param code `String`
-     * @param callback `(details: RedeemInformation?, error: AccountRequestError?) -> Unit`
+     * @param callback `(details: RedeemInformation?, error: List<AccountRequestError>) -> Unit`
      */
     fun redeem(
         email: String,
         code: String,
-        callback: (details: RedeemInformation?, error: AccountRequestError?) -> Unit
+        callback: (details: RedeemInformation?, error: List<AccountRequestError>) -> Unit
     )
 
     /**
      * It returns an in-app communication message for each platform.
      *
-     * @param token `String`
      * @param appVersion `String`
-     * @param callback `(message: MessageInformation?, error: AccountRequestError?) -> Unit`
+     * @param callback `(message: MessageInformation?, error: List<AccountRequestError>) -> Unit`
      */
-    fun message(
-        token: String,
-        appVersion: String,
-        callback: (message: MessageInformation?, error: AccountRequestError?) -> Unit
-    )
+    fun message(appVersion: String, callback: (message: MessageInformation?, error: List<AccountRequestError>) -> Unit)
 
     /**
-     * @param stagingEndpoint `String?` If null. Requests will be done against the endpoints provided by
-     * `AccountClientStateProvider.accountEndpoints`
-     * @param callback `(details: FeatureFlagsInformation?, error: AccountRequestError?) -> Unit`
+     * @param callback `(details: FeatureFlagsInformation?, error: List<AccountRequestError>) -> Unit`
      */
     fun featureFlags(
-        stagingEndpoint: String? = null,
-        callback: (details: FeatureFlagsInformation?, error: AccountRequestError?) -> Unit
+        callback: (details: FeatureFlagsInformation?, error: List<AccountRequestError>) -> Unit
     )
 }
 
@@ -183,29 +175,29 @@ public interface AndroidAccountAPI: AccountAPI {
      * @param token `String`
      * @param productId `String`
      * @param applicationPackage `String`
-     * @param callback `(token: String?, error: AccountRequestError?) -> Unit`.
+     * @param callback `(error:List<AccountRequestError>) -> Unit`.
      */
     fun loginWithReceipt(
         store: String,
         token: String,
         productId: String,
         applicationPackage: String,
-        callback: (token: String?, error: AccountRequestError?) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     )
 
     /**
      * @param information `AndroidSignupInformation`
-     * @param callback `(details: SignUpInformation?, error: AccountRequestError?) -> Unit`
+     * @param callback `(details: SignUpInformation?, error: List<AccountRequestError>) -> Unit`
      */
     fun signUp(
         information: AndroidSignupInformation,
-        callback: (details: SignUpInformation?, error: AccountRequestError?) -> Unit
+        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
     )
 
     /**
-     * @param callback `(details: AndroidSubscriptionsInformation?, error: AccountRequestError?) -> Unit`
+     * @param callback `(details: AndroidSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit`
      */
-    fun subscriptions(callback: (details: AndroidSubscriptionsInformation?, error: AccountRequestError?) -> Unit)
+    fun subscriptions(callback: (details: AndroidSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit)
 }
 
 /**
@@ -215,11 +207,11 @@ public interface IOSAccountAPI: AccountAPI {
 
     /**
      * @param receiptBase64 `String`
-     * @param callback `(token: String?, error: AccountRequestError?) -> Unit`.
+     * @param callback `(error: List<AccountRequestError>) -> Unit`.
      */
     fun loginWithReceipt(
         receiptBase64: String,
-        callback: (token: String?, error: AccountRequestError?) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     )
 
     /**
@@ -227,52 +219,52 @@ public interface IOSAccountAPI: AccountAPI {
      * @param password `String`
      * @param email `String`
      * @param resetPassword `Boolean`
-     * @param callback `(temporaryPassword: String, error: AccountRequestError?) -> Unit`
+     * @param callback `(temporaryPassword: String, error: List<AccountRequestError>) -> Unit`
      */
     fun setEmail(
         username: String,
         password: String,
         email: String,
         resetPassword: Boolean,
-        callback: (temporaryPassword: String?, error: AccountRequestError?) -> Unit
+        callback: (temporaryPassword: String?, error: List<AccountRequestError>) -> Unit
     )
 
     /**
      * @param username `String`
      * @param username `String`
      * @param information `IOSPaymentInformation`
-     * @param callback `(error: AccountRequestError?) -> Unit`
+     * @param callback `(error: List<AccountRequestError>) -> Unit`
      */
     fun payment(
         username: String,
         password: String,
         information: IOSPaymentInformation,
-        callback: (error: AccountRequestError?) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     )
 
     /**
      * @param information `IOSSignupInformation`
-     * @param callback `(details: SignUpInformation?, error: AccountRequestError?) -> Unit`
+     * @param callback `(details: SignUpInformation?, error: List<AccountRequestError>) -> Unit`
      */
     fun signUp(
         information: IOSSignupInformation,
-        callback: (details: SignUpInformation?, error: AccountRequestError?) -> Unit
+        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
     )
 
     /**
      * @param receipt `String?`
-     * @param callback `(details: IOSSubscriptionInformation?, error: AccountRequestError?) -> Unit`
+     * @param callback `(details: IOSSubscriptionInformation?, error: List<AccountRequestError>) -> Unit`
      */
     fun subscriptions(
         receipt: String?,
-        callback: (details: IOSSubscriptionInformation?, error: AccountRequestError?) -> Unit
+        callback: (details: IOSSubscriptionInformation?, error: List<AccountRequestError>) -> Unit
     )
 }
 
 /**
- * Interface defining the client's data provider.
+ * Interface defining the client's endpoint provider.
  */
-public interface AccountClientStateProvider {
+public interface IAccountEndpointProvider {
 
     /**
      * It returns the list of endpoints to try to reach when performing a request. Order is relevant.
@@ -287,17 +279,27 @@ public interface AccountClientStateProvider {
  * either `AndroidAccountAPI` or `IOSAccountAPI` interface. Depending on the platform.
  */
 public class AccountBuilder<T> {
-    private var clientStateProvider: AccountClientStateProvider? = null
+    private var endpointsProvider: IAccountEndpointProvider? = null
+    private var certificate: String? = null
     private var platform: Platform? = null
     private var userAgentValue: String? = null
 
     /**
-     * It sets the instance responsible to provide the client state down to the module.
+     * It sets the endpoints provider, that is queried for the current endpoint list. Required.
      *
-     * @param clientStateProvider `AccountClientStateProvider`.
+     * @param endpointsProvider `IAccountEndpointProvider`.
      */
-    fun setClientStateProvider(clientStateProvider: AccountClientStateProvider): AccountBuilder<T> =
-        apply { this.clientStateProvider = clientStateProvider }
+    fun setEndpointProvider(endpointsProvider: IAccountEndpointProvider): AccountBuilder<T> =
+        apply { this.endpointsProvider = endpointsProvider }
+
+    /**
+     * It sets the certificate to use when using an endpoint with pinning enabled. Optional.
+     *
+     * @param certificate `String`.
+     */
+    fun setCertificate(certificate: String?): AccountBuilder<T> = apply {
+        this.certificate = certificate
+    }
 
     /**
      * It sets the platform for which we are building the API.
@@ -319,15 +321,15 @@ public class AccountBuilder<T> {
      * @return `AndroidAccountAPI` or `IOSAccountAPI` interface. Depending on the platform.
      */
     fun <T> build(): T {
-        val clientStateProvider = this.clientStateProvider
-            ?: throw Exception("Client state provider missing.")
+        val endpointsProvider = this.endpointsProvider
+            ?: throw Exception("Endpoints provider missing.")
         val platform = this.platform
             ?: throw Exception("Platform definition missing.")
         val userAgentValue = this.userAgentValue
             ?: throw Exception("User-Agent value missing.")
         return when (platform) {
-            Platform.IOS -> IOSAccount(clientStateProvider, userAgentValue) as T
-            Platform.ANDROID -> AndroidAccount(clientStateProvider, userAgentValue) as T
+            Platform.IOS -> IOSAccount(endpointsProvider, certificate, userAgentValue) as T
+            Platform.ANDROID -> AndroidAccount(endpointsProvider, certificate, userAgentValue) as T
         }
     }
 }
@@ -339,9 +341,17 @@ public data class AccountRequestError(val code: Int, val message: String?)
 
 /**
  * Data class defining the endpoints data needed when performing a request on it.
+ *
+ * @param ipOrRootDomain `String`. Indicates the ip or root domain to use for the requests.
+ * e.g. `127.0.0.1` or `privateinternetaccess.com`
+ * @param isProxy `Boolean`. Indicates whether the given address should be treated as a proxy. Excluding it from
+ * proxy sensitive request. e.g. showing the user its ip.
+ * @param usePinnedCertificate `Boolean`. Indicates whether this address should be pinned to the provided certificate.
+ * @param certificateCommonName `String?`. When pinning is enabled. Provide the common name for it.
  */
+
 public data class AccountEndpoint(
-    val endpoint: String,
+    val ipOrRootDomain: String,
     val isProxy: Boolean,
     val usePinnedCertificate: Boolean = false,
     val certificateCommonName: String? = null
