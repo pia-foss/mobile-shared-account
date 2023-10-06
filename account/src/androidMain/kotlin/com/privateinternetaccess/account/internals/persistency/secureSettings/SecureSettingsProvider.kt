@@ -16,7 +16,5 @@ internal actual object SecureSettingsProvider {
     // No change. The deprecated settings is for iOS only due to
     // its constructor kSecAttrAccessible change.
     actual val deprecatedSettings: Settings?
-        get() = AccountContextProvider.applicationContext?.let { context ->
-            EncryptedSettingsFactory(context).create(SHARED_PREFS_NAME)
-        }
+        get() = settings
 }
