@@ -19,4 +19,10 @@ internal actual object SecureSettingsProvider {
             kSecAttrService to CFBridgingRetain(KEYCHAIN_NAME),
             kSecAttrAccessible to kSecAttrAccessibleAlways
         )
+
+    @OptIn(ExperimentalSettingsImplementation::class, ExperimentalForeignApi::class)
+    actual val deprecatedSettings: Settings?
+        get() = KeychainSettings(
+            kSecAttrService to CFBridgingRetain(KEYCHAIN_NAME)
+        )
 }

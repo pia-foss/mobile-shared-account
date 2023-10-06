@@ -9,8 +9,10 @@ import com.russhwolf.settings.Settings
 internal object SecureSettingsPersistence : AccountPersistence {
 
     private val settings: Settings? = SecureSettingsProvider.settings
+    private val deprecatedSettings: Settings? = SecureSettingsProvider.deprecatedSettings
 
     override fun persistApiTokenResponse(apiToken: ApiTokenResponse) {
+        migrateTokens()
         settings?.putString(
             Account.API_TOKEN_KEY,
             Account.json.encodeToString(
@@ -21,6 +23,7 @@ internal object SecureSettingsPersistence : AccountPersistence {
     }
 
     override fun persistVpnTokenResponse(vpnToken: VpnTokenResponse) {
+        migrateTokens()
         settings?.putString(
             Account.VPN_TOKEN_KEY,
             Account.json.encodeToString(
@@ -30,21 +33,37 @@ internal object SecureSettingsPersistence : AccountPersistence {
         )
     }
 
-    override fun apiTokenResponse(): ApiTokenResponse? =
-        settings?.getStringOrNull(Account.API_TOKEN_KEY)?.let {
+    override fun apiTokenResponse(): ApiTokenResponse? {
+        migrateTokens()
+        return settings?.getStringOrNull(Account.API_TOKEN_KEY)?.let {
             Account.json.decodeFromString(ApiTokenResponse.serializer(), it)
         }
+    }
 
-    override fun vpnTokenResponse(): VpnTokenResponse? =
-        settings?.getStringOrNull(Account.VPN_TOKEN_KEY)?.let {
+    override fun vpnTokenResponse(): VpnTokenResponse? {
+        migrateTokens()
+        return settings?.getStringOrNull(Account.VPN_TOKEN_KEY)?.let {
             Account.json.decodeFromString(VpnTokenResponse.serializer(), it)
         }
+    }
 
     override fun clearApiTokenResponse() {
         settings?.remove(Account.API_TOKEN_KEY)
+        deprecatedSettings?.remove(Account.API_TOKEN_KEY)
     }
 
     override fun clearVpnTokenResponse() {
         settings?.remove(Account.VPN_TOKEN_KEY)
+        deprecatedSettings?.remove(Account.VPN_TOKEN_KEY)
     }
+
+    // region private
+    private fun migrateTokens() {
+        deprecatedSettings?.keys?.forEach {
+            val value = deprecatedSettings.getString(it, "")
+            deprecatedSettings.remove(it)
+            settings?.putString(it, value)
+        }
+    }
+    // endregion
 }
