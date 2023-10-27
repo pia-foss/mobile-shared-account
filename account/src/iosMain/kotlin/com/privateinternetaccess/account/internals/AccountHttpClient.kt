@@ -35,7 +35,7 @@ internal actual object AccountHttpClient {
         certificate: String?,
         pinnedEndpoint: Pair<String, String>?
     ): Pair<HttpClient?, Exception?> {
-        return Pair(HttpClient(Ios) {
+        return Pair(HttpClient(Darwin) {
             expectSuccess = false
             install(HttpTimeout) {
                 requestTimeoutMillis = Account.REQUEST_TIMEOUT_MS
