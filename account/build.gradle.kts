@@ -10,7 +10,7 @@ plugins {
 publishing {
     repositories {
         maven {
-            url = uri("https://maven.pkg.github.com/xvpn/cpz_pia-mobile_shared_account/")
+            url = uri("https://maven.pkg.github.com/pia-foss/mobile-shared-account/")
             credentials {
                 username = System.getenv("GITHUB_USERNAME")
                 password = System.getenv("GITHUB_TOKEN")
@@ -78,12 +78,12 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.5.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.4.0")
-                implementation("com.russhwolf:multiplatform-settings:1.0.0")
+                implementation("com.russhwolf:multiplatform-settings:1.1.0")
             }
         }
         val androidMain by getting {
             dependencies {
-                implementation("androidx.security:security-crypto:1.1.0-alpha03")
+                implementation("androidx.security:security-crypto:1.1.0-alpha06")
                 implementation("com.madgag.spongycastle:core:1.58.0.0")
                 implementation("io.ktor:ktor-client-okhttp:2.3.3")
             }
