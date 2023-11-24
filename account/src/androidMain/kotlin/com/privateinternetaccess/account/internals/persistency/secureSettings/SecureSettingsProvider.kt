@@ -16,5 +16,5 @@ internal actual object SecureSettingsProvider {
     // No change. The deprecated settings is for iOS only due to
     // its constructor kSecAttrAccessible change.
     actual val deprecatedSettings: Settings?
-        get() = settings
+        get() = null
 }
