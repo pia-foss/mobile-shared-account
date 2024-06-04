@@ -23,6 +23,7 @@ import io.ktor.client.engine.darwin.*
 import io.ktor.client.engine.ios.Ios
 import io.ktor.client.plugins.*
 import io.ktor.client.engine.ios.*
+import io.ktor.client.request.request
 import kotlinx.cinterop.*
 import platform.CoreFoundation.*
 import platform.Foundation.*
@@ -33,12 +34,13 @@ internal actual object AccountHttpClient {
 
     actual fun client(
         certificate: String?,
-        pinnedEndpoint: Pair<String, String>?
+        pinnedEndpoint: Pair<String, String>?,
+        requestTimeoutMillis: Long
     ): Pair<HttpClient?, Exception?> {
         return Pair(HttpClient(Darwin) {
             expectSuccess = false
             install(HttpTimeout) {
-                requestTimeoutMillis = Account.REQUEST_TIMEOUT_MS
+                this.requestTimeoutMillis = requestTimeoutMillis
             }
 
             if (certificate != null && pinnedEndpoint != null) {

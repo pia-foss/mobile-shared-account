@@ -31,12 +31,13 @@ internal actual object AccountHttpClient {
 
     actual fun client(
         certificate: String?,
-        pinnedEndpoint: Pair<String, String>?
+        pinnedEndpoint: Pair<String, String>?,
+        requestTimeoutMillis: Long
     ): Pair<HttpClient?, Exception?> {
         return Pair(HttpClient(Darwin) {
             expectSuccess = false
             install(HttpTimeout) {
-                requestTimeoutMillis = Account.REQUEST_TIMEOUT_MS
+                this.requestTimeoutMillis = requestTimeoutMillis
             }
 
             if (certificate != null && pinnedEndpoint != null) {
