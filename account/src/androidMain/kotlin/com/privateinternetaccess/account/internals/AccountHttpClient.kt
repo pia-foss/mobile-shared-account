@@ -42,7 +42,7 @@ internal actual object AccountHttpClient {
     actual fun client(
         certificate: String?,
         pinnedEndpoint: Pair<String, String>?,
-        requestTimeoutMillis: Long?
+        requestTimeoutMillis: Long
     ) : Pair<HttpClient?, Exception?> {
         var httpClient: HttpClient? = null
         var exception: Exception? = null
@@ -50,7 +50,7 @@ internal actual object AccountHttpClient {
             httpClient = HttpClient(OkHttp) {
                 expectSuccess = false
                 install(HttpTimeout) {
-                    this.requestTimeoutMillis = requestTimeoutMillis ?: Account.REQUEST_TIMEOUT_MS
+                    this.requestTimeoutMillis = requestTimeoutMillis
                 }
 
                 if (certificate != null && pinnedEndpoint != null) {

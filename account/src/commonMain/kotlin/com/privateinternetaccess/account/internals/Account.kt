@@ -54,7 +54,7 @@ internal expect object AccountHttpClient {
     fun client(
         certificate: String? = null,
         pinnedEndpoint: Pair<String, String>? = null,
-        requestTimeoutMillis: Long? = null,
+        requestTimeoutMillis: Long = Account.REQUEST_TIMEOUT_MS
     ): Pair<HttpClient?, Exception?>
 }
 
@@ -222,7 +222,7 @@ internal open class Account(
     }
 
     override fun clientStatus(
-        requestTimeoutMillis: Long?,
+        requestTimeoutMillis: Long,
         callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit
 
     ) {
@@ -971,7 +971,7 @@ internal open class Account(
     private suspend fun clientStatusAsync(
         endpoints: List<AccountEndpoint>,
         callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit,
-        requestTimeoutMillis: Long?
+        requestTimeoutMillis: Long
     ) {
         var clientStatus: ClientStatusInformation? = null
         val listErrors: MutableList<AccountRequestError> = mutableListOf()
