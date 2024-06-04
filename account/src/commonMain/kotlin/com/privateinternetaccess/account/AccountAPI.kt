@@ -109,9 +109,13 @@ public interface AccountAPI {
     )
 
     /**
+     * @param requestTimeoutMillis `Long?`
      * @param callback `(status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit`
      */
-    fun clientStatus(callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit)
+    fun clientStatus(
+        requestTimeoutMillis: Long?,
+        callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit,
+    )
 
     /**
      * @param email `String`

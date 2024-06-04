@@ -53,7 +53,8 @@ internal expect object AccountHttpClient {
      */
     fun client(
         certificate: String? = null,
-        pinnedEndpoint: Pair<String, String>? = null
+        pinnedEndpoint: Pair<String, String>? = null,
+        requestTimeoutMillis: Long? = null,
     ): Pair<HttpClient?, Exception?>
 }
 
@@ -221,10 +222,12 @@ internal open class Account(
     }
 
     override fun clientStatus(
+        requestTimeoutMillis: Long?,
         callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit
+
     ) {
         launch {
-            clientStatusAsync(endpointsProvider.accountEndpoints(), callback)
+            clientStatusAsync(endpointsProvider.accountEndpoints(), callback, requestTimeoutMillis)
         }
     }
 
@@ -967,7 +970,8 @@ internal open class Account(
 
     private suspend fun clientStatusAsync(
         endpoints: List<AccountEndpoint>,
-        callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit,
+        requestTimeoutMillis: Long?
     ) {
         var clientStatus: ClientStatusInformation? = null
         val listErrors: MutableList<AccountRequestError> = mutableListOf()
@@ -994,9 +998,9 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!), requestTimeoutMillis)
             } else {
-                AccountHttpClient.client()
+                AccountHttpClient.client(requestTimeoutMillis = requestTimeoutMillis)
             }
 
             val httpClient = httpClientConfigResult.first
