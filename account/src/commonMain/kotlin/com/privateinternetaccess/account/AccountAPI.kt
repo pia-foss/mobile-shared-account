@@ -18,6 +18,7 @@
 
 package com.privateinternetaccess.account
 
+import com.privateinternetaccess.account.internals.Account
 import com.privateinternetaccess.account.internals.AndroidAccount
 import com.privateinternetaccess.account.internals.IOSAccount
 import com.privateinternetaccess.account.model.request.AmazonSignupInformation
@@ -109,9 +110,13 @@ public interface AccountAPI {
     )
 
     /**
+     * @param requestTimeoutMillis `Long`
      * @param callback `(status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit`
      */
-    fun clientStatus(callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit)
+    fun clientStatus(
+        requestTimeoutMillis: Long = Account.REQUEST_TIMEOUT_MS,
+        callback: (status: ClientStatusInformation?, error: List<AccountRequestError>) -> Unit,
+    )
 
     /**
      * @param email `String`
