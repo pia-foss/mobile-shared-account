@@ -21,6 +21,7 @@ package com.privateinternetaccess.account
 import com.privateinternetaccess.account.internals.Account
 import com.privateinternetaccess.account.internals.AndroidAccount
 import com.privateinternetaccess.account.internals.IOSAccount
+import com.privateinternetaccess.account.internals.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.model.request.AmazonSignupInformation
 import com.privateinternetaccess.account.model.request.AndroidSignupInformation
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation
@@ -92,20 +93,27 @@ public interface AccountAPI {
     fun deleteAccount(callback: (error: List<AccountRequestError>) -> Unit)
 
     /**
-     * @param ipTokens `List<String>`
+     * @param callback `(details: DipCountriesResponse?, error: List<AccountRequestError>) -> Unit`
+     */
+    fun supportedDedicatedIPCountries(
+        callback: (details: DipCountriesResponse?, error: List<AccountRequestError>) -> Unit
+    )
+
+    /**
+     * @param dipTokens `List<String>`
      * @param callback `(details: DedicatedIPInformation, error: List<AccountRequestError>) -> Unit`
      */
-    fun dedicatedIPs(
-        ipTokens: List<String>,
+    fun redeemDedicatedIPs(
+        dipTokens: List<String>,
         callback: (details: List<DedicatedIPInformation>, error: List<AccountRequestError>) -> Unit
     )
 
     /**
-     * @param ipToken `String`
+     * @param dipToken `String`
      * @param callback `(details: DedicatedIPInformation, error: List<AccountRequestError>) -> Unit`
      */
     fun renewDedicatedIP(
-        ipToken: String,
+        dipToken: String,
         callback: (error: List<AccountRequestError>) -> Unit
     )
 
