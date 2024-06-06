@@ -21,6 +21,7 @@ package com.privateinternetaccess.account.internals
 import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.DedicatedIPRequest
 import com.privateinternetaccess.account.internals.model.response.ApiTokenResponse
+import com.privateinternetaccess.account.internals.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
 import com.privateinternetaccess.account.internals.model.response.VpnTokenResponse
 import com.privateinternetaccess.account.internals.persistency.AccountPersistence
@@ -83,7 +84,8 @@ internal open class Account(
         REDEEM("/api/client/giftcard_redeem"),
         REFRESH_TOKEN("/api/client/v4/refresh"),
         MESSAGES("/api/client/v2/messages"),
-        DEDICATED_IP("/api/client/v2/dedicated_ip"),
+        SUPPORTED_DEDICATED_IP_COUNTRIES("/api/client/v5/dip_regions"),
+        REDEEM_DEDICATED_IP("/api/client/v2/dedicated_ip"),
         RENEW_DEDICATED_IP("/api/client/v2/check_renew_dip"),
         ANDROID_SUBSCRIPTIONS("/api/client/android"),
         AMAZON_SUBSCRIPTIONS("/api/client/amazon"),
@@ -115,7 +117,8 @@ internal open class Account(
             Path.REDEEM to "api",
             Path.REFRESH_TOKEN to "apiv4",
             Path.MESSAGES to "apiv2",
-            Path.DEDICATED_IP to "apiv2",
+            Path.SUPPORTED_DEDICATED_IP_COUNTRIES to "apiv5",
+            Path.REDEEM_DEDICATED_IP to "apiv2",
             Path.RENEW_DEDICATED_IP to "apiv2",
             Path.ANDROID_SUBSCRIPTIONS to "api",
             Path.AMAZON_SUBSCRIPTIONS to "api",
@@ -203,21 +206,29 @@ internal open class Account(
         }
     }
 
-    override fun dedicatedIPs(
-        ipTokens: List<String>,
+    override fun supportedDedicatedIPCountries(
+        callback: (details: DipCountriesResponse?, error: List<AccountRequestError>) -> Unit
+    ) {
+        launch {
+            supportedDedicatedIPCountriesAsync(endpointsProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun redeemDedicatedIPs(
+        dipTokens: List<String>,
         callback: (details: List<DedicatedIPInformation>, error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            dedicatedIPsAsync(ipTokens, endpointsProvider.accountEndpoints(), callback)
+            redeemDedicatedIPsAsync(dipTokens, endpointsProvider.accountEndpoints(), callback)
         }
     }
 
     override fun renewDedicatedIP(
-        ipToken: String,
+        dipToken: String,
         callback: (error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            renewDedicatedIPAsync(ipToken, endpointsProvider.accountEndpoints(), callback)
+            renewDedicatedIPAsync(dipToken, endpointsProvider.accountEndpoints(), callback)
         }
     }
 
@@ -775,8 +786,105 @@ internal open class Account(
         }
     }
 
-    private suspend fun dedicatedIPsAsync(
-        ipTokens: List<String>,
+    private suspend fun supportedDedicatedIPCountriesAsync(
+        endpoints: List<AccountEndpoint>,
+        callback: (details: DipCountriesResponse?, error: List<AccountRequestError>) -> Unit
+    ) {
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        var supportedDedicatedIPsCountries: DipCountriesResponse? = null
+        if (endpoints.isEmpty()) {
+            listErrors.add(
+                AccountRequestError(
+                    600,
+                    "No available endpoints to perform the request"
+                )
+            )
+        }
+
+        refreshTokensIfNeeded(endpoints)
+        for (endpoint in endpoints) {
+            val apiToken = persistence.apiTokenResponse()?.apiToken
+            if (apiToken == null) {
+                listErrors.add(AccountRequestError(600, "Invalid request token"))
+                break
+            }
+
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.SUPPORTED_DEDICATED_IP_COUNTRIES)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SUPPORTED_DEDICATED_IP_COUNTRIES.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.getCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
+                header("Authorization", "Token $apiToken")
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    listErrors.add(it.mapStatusCodeToAccountError())
+                } else {
+                    try {
+                        supportedDedicatedIPsCountries = json.decodeFromString(
+                            DipCountriesResponse.serializer(), it.bodyAsText()
+                        )
+                        succeeded = true
+                    } catch (exception: SerializationException) {
+                        listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                    }
+                }
+            }
+            response.second?.let {
+                listErrors.add(AccountRequestError(600, it.message))
+            }
+
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (succeeded) {
+                listErrors.clear()
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(supportedDedicatedIPsCountries, listErrors)
+        }
+    }
+
+    private suspend fun redeemDedicatedIPsAsync(
+        dipTokens: List<String>,
         endpoints: List<AccountEndpoint>,
         callback: (details: List<DedicatedIPInformation>, error: List<AccountRequestError>) -> Unit
     ) {
@@ -827,9 +935,9 @@ internal open class Account(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.DEDICATED_IP)
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.REDEEM_DEDICATED_IP)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.DEDICATED_IP.url}"))
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REDEEM_DEDICATED_IP.url}"))
                 continue
             }
 
@@ -838,7 +946,7 @@ internal open class Account(
                 url(url)
                 header("Authorization", "Token $apiToken")
                 contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(DedicatedIPRequest.serializer(), DedicatedIPRequest(ipTokens)))
+                setBody(json.encodeToString(DedicatedIPRequest.serializer(), DedicatedIPRequest(dipTokens)))
             }
 
             response.first?.let {
@@ -877,7 +985,7 @@ internal open class Account(
     }
 
     private suspend fun renewDedicatedIPAsync(
-        ipToken: String,
+        dipToken: String,
         endpoints: List<AccountEndpoint>,
         callback: (error: List<AccountRequestError>) -> Unit
     ) {
@@ -935,7 +1043,7 @@ internal open class Account(
 
             var succeeded = false
             val formParameters = Parameters.build {
-                append("token", ipToken)
+                append("token", dipToken)
             }
             val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
                 url(url)
