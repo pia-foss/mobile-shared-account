@@ -21,7 +21,7 @@ package com.privateinternetaccess.account
 import com.privateinternetaccess.account.internals.Account
 import com.privateinternetaccess.account.internals.AndroidAccount
 import com.privateinternetaccess.account.internals.IOSAccount
-import com.privateinternetaccess.account.internals.model.response.DipCountriesResponse
+import com.privateinternetaccess.account.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.model.request.AmazonSignupInformation
 import com.privateinternetaccess.account.model.request.AndroidSignupInformation
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation
@@ -233,9 +233,14 @@ public interface AndroidAccountAPI: AccountAPI {
     )
 
     /**
+     * @param callback `(details: AndroidAddonsSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit`
+     */
+    fun addonsSubscriptions(callback: (details: AndroidAddonsSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit)
+
+    /**
      * @param callback `(details: AndroidSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit`
      */
-    fun subscriptions(callback: (details: AndroidSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit)
+    fun vpnSubscriptions(callback: (details: AndroidVpnSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit)
 
     /**
      * @param callback `(details: AndroidSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit`

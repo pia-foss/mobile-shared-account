@@ -21,7 +21,7 @@ package com.privateinternetaccess.account.internals
 import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.DedicatedIPRequest
 import com.privateinternetaccess.account.internals.model.response.ApiTokenResponse
-import com.privateinternetaccess.account.internals.model.response.DipCountriesResponse
+import com.privateinternetaccess.account.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
 import com.privateinternetaccess.account.internals.model.response.VpnTokenResponse
 import com.privateinternetaccess.account.internals.persistency.AccountPersistence
@@ -87,7 +87,8 @@ internal open class Account(
         SUPPORTED_DEDICATED_IP_COUNTRIES("/api/client/v5/dip_regions"),
         REDEEM_DEDICATED_IP("/api/client/v2/dedicated_ip"),
         RENEW_DEDICATED_IP("/api/client/v2/check_renew_dip"),
-        ANDROID_SUBSCRIPTIONS("/api/client/android"),
+        ANDROID_ADDONS_SUBSCRIPTIONS("/api/client/v5/android_addons"),
+        ANDROID_VPN_SUBSCRIPTIONS("/api/client/android"),
         AMAZON_SUBSCRIPTIONS("/api/client/amazon"),
         ANDROID_FEATURE_FLAG("/clients/desktop/android-flags"),
         IOS_PAYMENT("/api/client/payment"),
@@ -120,7 +121,8 @@ internal open class Account(
             Path.SUPPORTED_DEDICATED_IP_COUNTRIES to "apiv5",
             Path.REDEEM_DEDICATED_IP to "apiv2",
             Path.RENEW_DEDICATED_IP to "apiv2",
-            Path.ANDROID_SUBSCRIPTIONS to "api",
+            Path.ANDROID_ADDONS_SUBSCRIPTIONS to "apiv5",
+            Path.ANDROID_VPN_SUBSCRIPTIONS to "api",
             Path.AMAZON_SUBSCRIPTIONS to "api",
             Path.ANDROID_FEATURE_FLAG to "api",
             Path.IOS_PAYMENT to "api",

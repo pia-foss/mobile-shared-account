@@ -23,7 +23,7 @@ import kotlinx.serialization.Serializable
 
 
 @Serializable
-data class AndroidSubscriptionsInformation(
+data class AndroidVpnSubscriptionsInformation(
     @SerialName("available_products")
     val availableProducts: List<AvailableProduct>,
     @SerialName("status")
