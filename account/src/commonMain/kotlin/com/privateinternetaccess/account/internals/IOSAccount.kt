@@ -28,7 +28,7 @@ import com.privateinternetaccess.account.internals.utils.NetworkUtils.mapStatusC
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation
 import com.privateinternetaccess.account.model.request.IOSSignupInformation
 import com.privateinternetaccess.account.model.response.IOSSubscriptionInformation
-import com.privateinternetaccess.account.model.response.SignUpInformation
+import com.privateinternetaccess.account.model.response.VpnSignUpInformation
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -81,7 +81,7 @@ internal class IOSAccount(
 
     override fun signUp(
         information: IOSSignupInformation,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
     ) {
         launch {
             signUpAsync(information, endpointsProvider.accountEndpoints(), callback)
@@ -371,9 +371,9 @@ internal class IOSAccount(
     private suspend fun signUpAsync(
         information: IOSSignupInformation,
         endpoints: List<AccountEndpoint>,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
     ) {
-        var signUpInformation: SignUpInformation? = null
+        var signUpInformation: VpnSignUpInformation? = null
         val listErrors: MutableList<AccountRequestError> = mutableListOf()
         if (endpoints.isEmpty()) {
             listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
@@ -408,9 +408,9 @@ internal class IOSAccount(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.SIGNUP)
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.VPN_SIGNUP)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SIGNUP.url}"))
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.VPN_SIGNUP.url}"))
                 continue
             }
 
@@ -426,7 +426,7 @@ internal class IOSAccount(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        signUpInformation = json.decodeFromString(SignUpInformation.serializer(), it.bodyAsText())
+                        signUpInformation = json.decodeFromString(VpnSignUpInformation.serializer(), it.bodyAsText())
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))

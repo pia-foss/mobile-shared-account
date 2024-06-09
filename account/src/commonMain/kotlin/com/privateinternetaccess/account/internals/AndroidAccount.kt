@@ -22,15 +22,15 @@ import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.AmazonLoginReceiptRequest
 import com.privateinternetaccess.account.internals.model.request.AndroidLoginReceiptRequest
 import com.privateinternetaccess.account.internals.model.response.ApiTokenResponse
-import com.privateinternetaccess.account.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.internals.utils.AccountUtils
 import com.privateinternetaccess.account.internals.utils.NetworkUtils.mapStatusCodeToAccountError
 import com.privateinternetaccess.account.model.request.AmazonSignupInformation
-import com.privateinternetaccess.account.model.request.AndroidSignupInformation
+import com.privateinternetaccess.account.model.request.AndroidAddonSignupInformation
+import com.privateinternetaccess.account.model.request.AndroidVpnSignupInformation
 import com.privateinternetaccess.account.model.response.AmazonSubscriptionsInformation
 import com.privateinternetaccess.account.model.response.AndroidAddonsSubscriptionsInformation
 import com.privateinternetaccess.account.model.response.AndroidVpnSubscriptionsInformation
-import com.privateinternetaccess.account.model.response.SignUpInformation
+import com.privateinternetaccess.account.model.response.VpnSignUpInformation
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -75,18 +75,27 @@ internal class AndroidAccount(
         }
     }
 
-    override fun signUp(
-        information: AndroidSignupInformation,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+    override fun addonSignUp(
+        information: AndroidAddonSignupInformation,
+        callback: (error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            signUpAsync(information, endpointsProvider.accountEndpoints(), callback)
+            addonSignUpAsync(information, endpointsProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun vpnSignUp(
+        information: AndroidVpnSignupInformation,
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
+    ) {
+        launch {
+            vpnSignUpAsync(information, endpointsProvider.accountEndpoints(), callback)
         }
     }
 
     override fun amazonSignUp(
         information: AmazonSignupInformation,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
     ) {
         launch {
             amazonSignUpAsync(information, endpointsProvider.accountEndpoints(), callback)
@@ -308,12 +317,98 @@ internal class AndroidAccount(
         }
     }
 
-    private suspend fun signUpAsync(
-        information: AndroidSignupInformation,
+    private suspend fun addonSignUpAsync(
+        information: AndroidAddonSignupInformation,
         endpoints: List<AccountEndpoint>,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (error: List<AccountRequestError>) -> Unit
     ) {
-        var signUpInformation: SignUpInformation? = null
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        if (endpoints.isEmpty()) {
+            listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
+        }
+
+        refreshTokensIfNeeded(endpoints)
+        for (endpoint in endpoints) {
+            val apiToken = persistence.apiTokenResponse()?.apiToken
+            if (apiToken == null) {
+                listErrors.add(AccountRequestError(600, "Invalid request token"))
+                break
+            }
+
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.ADDON_SIGNUP)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.ADDON_SIGNUP.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
+                header("Authorization", "Token $apiToken")
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(AndroidAddonSignupInformation.serializer(), information))
+            }
+
+            response.first?.let {
+                succeeded = AccountUtils.isErrorStatusCode(it.status.value).not()
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    listErrors.add(it.mapStatusCodeToAccountError())
+                }
+            }
+            response.second?.let {
+                listErrors.add(AccountRequestError(600, it.message))
+            }
+
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (succeeded) {
+                listErrors.clear()
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(listErrors)
+        }
+    }
+
+    private suspend fun vpnSignUpAsync(
+        information: AndroidVpnSignupInformation,
+        endpoints: List<AccountEndpoint>,
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
+    ) {
+        var signUpInformation: VpnSignUpInformation? = null
         val listErrors: MutableList<AccountRequestError> = mutableListOf()
         if (endpoints.isEmpty()) {
             listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
@@ -348,9 +443,9 @@ internal class AndroidAccount(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.SIGNUP)
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.VPN_SIGNUP)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SIGNUP.url}"))
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.VPN_SIGNUP.url}"))
                 continue
             }
 
@@ -358,7 +453,7 @@ internal class AndroidAccount(
             val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
                 url(url)
                 contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(AndroidSignupInformation.serializer(), information))
+                setBody(json.encodeToString(AndroidVpnSignupInformation.serializer(), information))
             }
 
             response.first?.let {
@@ -366,7 +461,7 @@ internal class AndroidAccount(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        signUpInformation = json.decodeFromString(SignUpInformation.serializer(), it.bodyAsText())
+                        signUpInformation = json.decodeFromString(VpnSignUpInformation.serializer(), it.bodyAsText())
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -396,9 +491,9 @@ internal class AndroidAccount(
     private suspend fun amazonSignUpAsync(
         information: AmazonSignupInformation,
         endpoints: List<AccountEndpoint>,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
     ) {
-        var signUpInformation: SignUpInformation? = null
+        var signUpInformation: VpnSignUpInformation? = null
         val listErrors: MutableList<AccountRequestError> = mutableListOf()
         if (endpoints.isEmpty()) {
             listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
@@ -433,9 +528,9 @@ internal class AndroidAccount(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.SIGNUP_AMAZON)
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.VPN_SIGNUP_AMAZON)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SIGNUP.url}"))
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.VPN_SIGNUP_AMAZON.url}"))
                 continue
             }
 
@@ -451,7 +546,7 @@ internal class AndroidAccount(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        signUpInformation = json.decodeFromString(SignUpInformation.serializer(), it.bodyAsText())
+                        signUpInformation = json.decodeFromString(VpnSignUpInformation.serializer(), it.bodyAsText())
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
