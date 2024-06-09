@@ -22,17 +22,18 @@ import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.AmazonLoginReceiptRequest
 import com.privateinternetaccess.account.internals.model.request.AndroidLoginReceiptRequest
 import com.privateinternetaccess.account.internals.model.response.ApiTokenResponse
+import com.privateinternetaccess.account.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.internals.utils.AccountUtils
+import com.privateinternetaccess.account.internals.utils.NetworkUtils.mapStatusCodeToAccountError
 import com.privateinternetaccess.account.model.request.AmazonSignupInformation
 import com.privateinternetaccess.account.model.request.AndroidSignupInformation
-import com.privateinternetaccess.account.model.request.IOSSignupInformation
 import com.privateinternetaccess.account.model.response.AmazonSubscriptionsInformation
-import com.privateinternetaccess.account.model.response.AndroidSubscriptionsInformation
+import com.privateinternetaccess.account.model.response.AndroidAddonsSubscriptionsInformation
+import com.privateinternetaccess.account.model.response.AndroidVpnSubscriptionsInformation
 import com.privateinternetaccess.account.model.response.SignUpInformation
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
-import io.ktor.utils.io.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.SerializationException
 
@@ -92,11 +93,19 @@ internal class AndroidAccount(
         }
     }
 
-    override fun subscriptions(
-        callback: (details: AndroidSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit
+    override fun addonsSubscriptions(
+        callback: (details: AndroidAddonsSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            subscriptionsAsync(endpointsProvider.accountEndpoints(), callback)
+            addonsSubscriptionsAsync(endpointsProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun vpnSubscriptions(
+        callback: (details: AndroidVpnSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit
+    ) {
+        launch {
+            vpnSubscriptionsAsync(endpointsProvider.accountEndpoints(), callback)
         }
     }
 
@@ -469,11 +478,108 @@ internal class AndroidAccount(
         }
     }
 
-    private suspend fun subscriptionsAsync(
+    private suspend fun addonsSubscriptionsAsync(
         endpoints: List<AccountEndpoint>,
-        callback: (details: AndroidSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (details: AndroidAddonsSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit
     ) {
-        var subscriptionsInformation: AndroidSubscriptionsInformation? = null
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        var addonsSubscriptionsInformation: AndroidAddonsSubscriptionsInformation? = null
+        if (endpoints.isEmpty()) {
+            listErrors.add(
+                AccountRequestError(
+                    600,
+                    "No available endpoints to perform the request"
+                )
+            )
+        }
+
+        refreshTokensIfNeeded(endpoints)
+        for (endpoint in endpoints) {
+            val apiToken = persistence.apiTokenResponse()?.apiToken
+            if (apiToken == null) {
+                listErrors.add(AccountRequestError(600, "Invalid request token"))
+                break
+            }
+
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.ANDROID_ADDONS_SUBSCRIPTIONS)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.ANDROID_ADDONS_SUBSCRIPTIONS.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.getCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
+                header("Authorization", "Token $apiToken")
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    listErrors.add(it.mapStatusCodeToAccountError())
+                } else {
+                    try {
+                        addonsSubscriptionsInformation = json.decodeFromString(
+                            AndroidAddonsSubscriptionsInformation.serializer(), it.bodyAsText()
+                        )
+                        succeeded = true
+                    } catch (exception: SerializationException) {
+                        listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                    }
+                }
+            }
+            response.second?.let {
+                listErrors.add(AccountRequestError(600, it.message))
+            }
+
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (succeeded) {
+                listErrors.clear()
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(addonsSubscriptionsInformation, listErrors)
+        }
+    }
+
+    private suspend fun vpnSubscriptionsAsync(
+        endpoints: List<AccountEndpoint>,
+        callback: (details: AndroidVpnSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit
+    ) {
+        var subscriptionsInformation: AndroidVpnSubscriptionsInformation? = null
         val listErrors: MutableList<AccountRequestError> = mutableListOf()
         if (endpoints.isEmpty()) {
             listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
@@ -509,9 +615,9 @@ internal class AndroidAccount(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.ANDROID_SUBSCRIPTIONS)
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.ANDROID_VPN_SUBSCRIPTIONS)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.ANDROID_SUBSCRIPTIONS.url}"))
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.ANDROID_VPN_SUBSCRIPTIONS.url}"))
                 continue
             }
 
@@ -525,7 +631,7 @@ internal class AndroidAccount(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        subscriptionsInformation = json.decodeFromString(AndroidSubscriptionsInformation.serializer(), it.bodyAsText())
+                        subscriptionsInformation = json.decodeFromString(AndroidVpnSubscriptionsInformation.serializer(), it.bodyAsText())
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))

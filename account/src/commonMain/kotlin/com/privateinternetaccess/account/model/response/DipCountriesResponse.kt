@@ -1,4 +1,4 @@
-package com.privateinternetaccess.account.internals.model.response
+package com.privateinternetaccess.account.model.response
 
 
 import kotlinx.serialization.SerialName
