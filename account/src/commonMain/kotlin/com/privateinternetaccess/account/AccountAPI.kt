@@ -23,7 +23,8 @@ import com.privateinternetaccess.account.internals.AndroidAccount
 import com.privateinternetaccess.account.internals.IOSAccount
 import com.privateinternetaccess.account.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.model.request.AmazonSignupInformation
-import com.privateinternetaccess.account.model.request.AndroidSignupInformation
+import com.privateinternetaccess.account.model.request.AndroidAddonSignupInformation
+import com.privateinternetaccess.account.model.request.AndroidVpnSignupInformation
 import com.privateinternetaccess.account.model.request.IOSPaymentInformation
 import com.privateinternetaccess.account.model.request.IOSSignupInformation
 import com.privateinternetaccess.account.model.response.DedicatedIPInformationResponse.DedicatedIPInformation
@@ -215,21 +216,30 @@ public interface AndroidAccountAPI: AccountAPI {
     )
 
     /**
-     * @param information `AndroidSignupInformation`
-     * @param callback `(details: SignUpInformation?, error: List<AccountRequestError>) -> Unit`
+     * @param information `AndroidVpnSignupInformation`
+     * @param callback `(error: List<AccountRequestError>) -> Unit`
      */
-    fun signUp(
-        information: AndroidSignupInformation,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+    fun addonSignUp(
+        information: AndroidAddonSignupInformation,
+        callback: (error: List<AccountRequestError>) -> Unit
+    )
+
+    /**
+     * @param information `AndroidVpnSignupInformation`
+     * @param callback `(details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit`
+     */
+    fun vpnSignUp(
+        information: AndroidVpnSignupInformation,
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
     )
 
     /**
      * @param information `AndroidSignupInformation`
-     * @param callback `(details: SignUpInformation?, error: List<AccountRequestError>) -> Unit`
+     * @param callback `(details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit`
      */
     fun amazonSignUp(
         information: AmazonSignupInformation,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
     )
 
     /**
@@ -300,7 +310,7 @@ public interface IOSAccountAPI: AccountAPI {
      */
     fun signUp(
         information: IOSSignupInformation,
-        callback: (details: SignUpInformation?, error: List<AccountRequestError>) -> Unit
+        callback: (details: VpnSignUpInformation?, error: List<AccountRequestError>) -> Unit
     )
 
     /**
