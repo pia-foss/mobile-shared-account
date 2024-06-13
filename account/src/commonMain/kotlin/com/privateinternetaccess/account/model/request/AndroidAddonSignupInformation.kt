@@ -17,6 +17,8 @@ data class AndroidAddonSignupInformation(
         val applicationPackage: String,
         @SerialName("product_id")
         val productId: String,
+        @SerialName("order_id")
+        val orderId: String,
         @SerialName("token")
         val token: String
     )
