@@ -20,6 +20,7 @@ package com.privateinternetaccess.account.internals
 
 import com.privateinternetaccess.account.*
 import com.privateinternetaccess.account.internals.model.request.DedicatedIPRequest
+import com.privateinternetaccess.account.internals.model.request.GetDedicatedIPTokenRequest
 import com.privateinternetaccess.account.internals.model.response.ApiTokenResponse
 import com.privateinternetaccess.account.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
@@ -86,6 +87,7 @@ internal open class Account(
         REFRESH_TOKEN("/api/client/v4/refresh"),
         MESSAGES("/api/client/v2/messages"),
         SUPPORTED_DEDICATED_IP_COUNTRIES("/api/client/v5/dip_regions"),
+        GET_DEDICATED_IP_TOKEN("/api/client/v5/redeem_dip_token"),
         REDEEM_DEDICATED_IP("/api/client/v2/dedicated_ip"),
         RENEW_DEDICATED_IP("/api/client/v2/check_renew_dip"),
         ANDROID_ADDONS_SUBSCRIPTIONS("/api/client/v5/android_addons"),
@@ -121,6 +123,7 @@ internal open class Account(
             Path.REFRESH_TOKEN to "apiv4",
             Path.MESSAGES to "apiv2",
             Path.SUPPORTED_DEDICATED_IP_COUNTRIES to "apiv5",
+            Path.GET_DEDICATED_IP_TOKEN to "apiv5",
             Path.REDEEM_DEDICATED_IP to "apiv2",
             Path.RENEW_DEDICATED_IP to "apiv2",
             Path.ANDROID_ADDONS_SUBSCRIPTIONS to "apiv5",
@@ -215,6 +218,16 @@ internal open class Account(
     ) {
         launch {
             supportedDedicatedIPCountriesAsync(endpointsProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun getDedicatedIP(
+        countryCode: String,
+        regionName: String,
+        callback: (details: DedicatedIPTokenDetails?, error: List<AccountRequestError>) -> Unit
+    ) {
+        launch {
+            getDedicatedIPAsync(countryCode, regionName, endpointsProvider.accountEndpoints(), callback)
         }
     }
 
@@ -884,6 +897,105 @@ internal open class Account(
 
         withContext(Dispatchers.Main) {
             callback(supportedDedicatedIPsCountries, listErrors)
+        }
+    }
+
+    private suspend fun getDedicatedIPAsync(
+        countryCode: String,
+        regionName: String,
+        endpoints: List<AccountEndpoint>,
+        callback: (details: DedicatedIPTokenDetails?, error: List<AccountRequestError>) -> Unit
+    ) {
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        var details: DedicatedIPTokenDetails? = null
+        if (endpoints.isEmpty()) {
+            listErrors.add(
+                AccountRequestError(
+                    600,
+                    "No available endpoints to perform the request"
+                )
+            )
+        }
+
+        refreshTokensIfNeeded(endpoints)
+        for (endpoint in endpoints) {
+            val apiToken = persistence.apiTokenResponse()?.apiToken
+            if (apiToken == null) {
+                listErrors.add(AccountRequestError(600, "Invalid request token"))
+                break
+            }
+
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.GET_DEDICATED_IP_TOKEN)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.GET_DEDICATED_IP_TOKEN.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
+                header("Authorization", "Token $apiToken")
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(GetDedicatedIPTokenRequest.serializer(), GetDedicatedIPTokenRequest(countryCode, regionName)))
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    listErrors.add(it.mapStatusCodeToAccountError())
+                } else {
+                    try {
+                        details = json.decodeFromString(DedicatedIPTokenDetails.serializer(), it.bodyAsText())
+                        succeeded = true
+                    } catch (exception: SerializationException) {
+                        listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                    }
+                }
+            }
+            response.second?.let {
+                listErrors.add(AccountRequestError(600, it.message))
+            }
+
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (succeeded) {
+                listErrors.clear()
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(details, listErrors)
         }
     }
 
