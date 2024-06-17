@@ -101,6 +101,17 @@ public interface AccountAPI {
     )
 
     /**
+     * @param countryCode `String`
+     * @param regionName `String`
+     * @param callback `(details: DedicatedIPTokenDetails?, error: List<AccountRequestError>) -> Unit`
+     */
+    fun getDedicatedIP(
+        countryCode: String,
+        regionName: String,
+        callback: (details: DedicatedIPTokenDetails?, error: List<AccountRequestError>) -> Unit
+    )
+
+    /**
      * @param dipTokens `List<String>`
      * @param callback `(details: DedicatedIPInformation, error: List<AccountRequestError>) -> Unit`
      */
