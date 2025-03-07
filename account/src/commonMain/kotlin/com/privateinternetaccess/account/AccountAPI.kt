@@ -332,6 +332,16 @@ public interface IOSAccountAPI: AccountAPI {
         receipt: String?,
         callback: (details: IOSSubscriptionInformation?, error: List<AccountRequestError>) -> Unit
     )
+
+    /**
+     * @param qrToken `String?`
+     * @param callback `(apiToken: String?, error: List<AccountRequestError>) -> Unit`
+     */
+    @InternalAPI
+    fun validateLoginQR(
+        qrToken: String,
+        callback: (apiToken: String?, error: List<AccountRequestError>) -> Unit
+    )
 }
 
 /**

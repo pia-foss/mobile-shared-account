@@ -96,7 +96,8 @@ internal open class Account(
         ANDROID_FEATURE_FLAG("/clients/desktop/android-flags"),
         IOS_PAYMENT("/api/client/payment"),
         IOS_SUBSCRIPTIONS("/api/client/ios"),
-        IOS_FEATURE_FLAG("/clients/desktop/ios-flags")
+        IOS_FEATURE_FLAG("/clients/desktop/ios-flags"),
+        VALIDATE_QR("/api/client/v5/login_token/auth")
     }
 
     companion object {
@@ -133,6 +134,7 @@ internal open class Account(
             Path.IOS_PAYMENT to "api",
             Path.IOS_SUBSCRIPTIONS to "api",
             Path.IOS_FEATURE_FLAG to "api",
+            Path.VALIDATE_QR to "apiv5",
         )
     }
 
