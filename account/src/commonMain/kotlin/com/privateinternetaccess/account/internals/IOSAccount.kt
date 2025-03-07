@@ -96,9 +96,108 @@ internal class IOSAccount(
             subscriptionsAsync(receipt, endpointsProvider.accountEndpoints(), callback)
         }
     }
+    @InternalAPI
+    override fun validateLoginQR(
+        qrToken: String,
+        callback: (apiToken: String?, error: List<AccountRequestError>) -> Unit
+    ) {
+        launch {
+            validateLoginQRAsync(qrToken, endpointsProvider.accountEndpoints(), callback)
+        }
+    }
     // endregion
 
     // region private
+    @InternalAPI
+    private suspend fun validateLoginQRAsync(
+        qrToken: String,
+        endpoints: List<AccountEndpoint>,
+        callback: (apiToken: String?, error: List<AccountRequestError>) -> Unit
+    ) {
+        var apiToken: String? = null
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        if (endpoints.isEmpty()) {
+            listErrors.add(AccountRequestError(600, "No available endpoints to perform the request"))
+        }
+
+        for (endpoint in endpoints) {
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.VALIDATE_QR)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.VALIDATE_QR.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
+                header("Authorization", "Bearer $qrToken")
+                header("accept", "application/json")
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    listErrors.add(it.mapStatusCodeToAccountError())
+                } else {
+                    it.content.readUTF8Line()?.let { content ->
+                        try {
+                            val apiTokenResponse = json.decodeFromString(ApiTokenResponse.serializer(), content)
+                            apiToken = apiTokenResponse.apiToken
+                            succeeded = true
+                        } catch (exception: SerializationException) {
+                            listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                        }
+                    } ?: run {
+                        listErrors.add(AccountRequestError(600, "Request response undefined"))
+                    }
+                }
+            }
+            response.second?.let {
+                listErrors.add(AccountRequestError(600, it.message))
+            }
+
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (succeeded) {
+                listErrors.clear()
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(apiToken, listErrors)
+        }
+    }
     @InternalAPI
     private suspend fun loginWithReceiptAsync(
         receiptBase64: String,
