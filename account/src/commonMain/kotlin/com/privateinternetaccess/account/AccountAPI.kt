@@ -30,6 +30,7 @@ import com.privateinternetaccess.account.model.request.IOSSignupInformation
 import com.privateinternetaccess.account.model.response.DedicatedIPInformationResponse.DedicatedIPInformation
 import com.privateinternetaccess.account.model.response.*
 import io.ktor.util.*
+import io.ktor.utils.io.InternalAPI
 
 
 /**
