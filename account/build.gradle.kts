@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
@@ -22,10 +23,9 @@ publishing {
 android {
     namespace = "com.kape.account"
 
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
         minSdk = 21
-        targetSdk = 34
     }
 
     buildTypes {
@@ -38,20 +38,20 @@ android {
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
 kotlin {
     group = "com.kape.android"
-    version = "1.5.2"
+    version = "1.5.3"
+
+    jvmToolchain(17)
 
     // Enable the default target hierarchy.
     // It's a template for all possible targets and their shared source sets hardcoded in the
     // Kotlin Gradle plugin.
-    targetHierarchy.default()
+    applyDefaultHierarchyTemplate()
 
     // Android
-    android {
+    androidTarget {
         publishLibraryVariants("release")
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "17"
-            }
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
         }
     }
 
@@ -78,30 +78,35 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-core:2.3.3")
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.5.1")
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
-                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.4.0")
-                implementation("com.russhwolf:multiplatform-settings:1.1.0")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.0")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
+                implementation("com.russhwolf:multiplatform-settings:1.3.0")
             }
         }
         val androidMain by getting {
             dependencies {
                 implementation("androidx.security:security-crypto:1.1.0-alpha06")
                 implementation("com.madgag.spongycastle:core:1.58.0.0")
-                implementation("io.ktor:ktor-client-okhttp:2.3.3")
+                implementation("io.ktor:ktor-client-okhttp:3.1.1")
             }
         }
         val iosMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-darwin:2.3.3")
+                implementation("io.ktor:ktor-client-darwin:3.1.0")
             }
         }
         val tvosMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-darwin:2.3.3")
+                implementation("io.ktor:ktor-client-darwin:3.1.0")
             }
         }
     }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
