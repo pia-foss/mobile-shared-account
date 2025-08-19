@@ -29,7 +29,9 @@ data class AndroidVpnSignupInformation(
     @SerialName("receipt")
     val receipt: Receipt,
     @SerialName("marketing")
-    val marketing: String? = null
+    val marketing: String? = null,
+    @SerialName("obfuscated_device_id")
+    val obfuscatedDeviceId: String
 ) {
     @Serializable
     data class Receipt(
