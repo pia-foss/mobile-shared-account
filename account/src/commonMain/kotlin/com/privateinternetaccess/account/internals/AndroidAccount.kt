@@ -18,7 +18,11 @@
 
 package com.privateinternetaccess.account.internals
 
-import com.privateinternetaccess.account.*
+import com.privateinternetaccess.account.AccountEndpoint
+import com.privateinternetaccess.account.AccountRequestError
+import com.privateinternetaccess.account.AndroidAccountAPI
+import com.privateinternetaccess.account.IAccountEndpointProvider
+import com.privateinternetaccess.account.Platform
 import com.privateinternetaccess.account.internals.model.request.AmazonLoginReceiptRequest
 import com.privateinternetaccess.account.internals.model.request.AndroidLoginReceiptRequest
 import com.privateinternetaccess.account.internals.model.response.ApiTokenResponse
@@ -30,11 +34,18 @@ import com.privateinternetaccess.account.model.request.AndroidVpnSignupInformati
 import com.privateinternetaccess.account.model.response.AmazonSubscriptionsInformation
 import com.privateinternetaccess.account.model.response.AndroidAddonsSubscriptionsInformation
 import com.privateinternetaccess.account.model.response.AndroidVpnSubscriptionsInformation
+import com.privateinternetaccess.account.model.response.LatestClientVersion
 import com.privateinternetaccess.account.model.response.VpnSignUpInformation
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import kotlinx.coroutines.*
+import io.ktor.client.request.header
+import io.ktor.client.request.setBody
+import io.ktor.client.request.url
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 
 
@@ -121,6 +132,12 @@ internal class AndroidAccount(
     override fun amazonSubscriptions(callback: (details: AmazonSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit) {
         launch {
             amazonSubscriptionsAsync(endpointsProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun latestRelease(callback: (latestClientVersion: LatestClientVersion?, error: List<AccountRequestError>) -> Unit) {
+        launch {
+            androidLatestVersionAsync(endpointsProvider.accountEndpoints(), callback)
         }
     }
     // endregion
@@ -834,6 +851,102 @@ internal class AndroidAccount(
 
         withContext(Dispatchers.Main) {
             callback(subscriptionsInformation, listErrors)
+        }
+    }
+
+    private suspend fun androidLatestVersionAsync(
+        endpoints: List<AccountEndpoint>,
+        callback: (latestClientVersion: LatestClientVersion?, error: List<AccountRequestError>) -> Unit
+    ) {
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        var clientVersion: LatestClientVersion? = null
+        if (endpoints.isEmpty()) {
+            listErrors.add(
+                AccountRequestError(
+                    600,
+                    "No available endpoints to perform the request"
+                )
+            )
+        }
+
+        refreshTokensIfNeeded(endpoints)
+        for (endpoint in endpoints) {
+            val apiToken = persistence.apiTokenResponse()?.apiToken
+            if (apiToken == null) {
+                listErrors.add(AccountRequestError(600, "Invalid request token"))
+                break
+            }
+
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.LATEST_ANDROID_VERSION)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.GET_DEDICATED_IP_TOKEN.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.getCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
+                header("Authorization", "Token $apiToken")
+                contentType(ContentType.Application.Json)
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    listErrors.add(it.mapStatusCodeToAccountError())
+                } else {
+                    try {
+                        clientVersion = json.decodeFromString(LatestClientVersion.serializer(), it.bodyAsText())
+                        succeeded = true
+                    } catch (exception: SerializationException) {
+                        listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                    }
+                }
+            }
+            response.second?.let {
+                listErrors.add(AccountRequestError(600, it.message))
+            }
+
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (succeeded) {
+                listErrors.clear()
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(clientVersion, listErrors)
         }
     }
 }

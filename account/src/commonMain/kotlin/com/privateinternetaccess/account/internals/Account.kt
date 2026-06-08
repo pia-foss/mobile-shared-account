@@ -97,7 +97,8 @@ internal open class Account(
         IOS_PAYMENT("/api/client/payment"),
         IOS_SUBSCRIPTIONS("/api/client/ios"),
         IOS_FEATURE_FLAG("/clients/desktop/ios-flags"),
-        VALIDATE_QR("/api/client/v5/login_token/auth")
+        VALIDATE_QR("/api/client/v5/login_token/auth"),
+        LATEST_ANDROID_VERSION("/api/client/android/latest_release")
     }
 
     companion object {
@@ -135,6 +136,7 @@ internal open class Account(
             Path.IOS_SUBSCRIPTIONS to "api",
             Path.IOS_FEATURE_FLAG to "api",
             Path.VALIDATE_QR to "apiv5",
+            Path.LATEST_ANDROID_VERSION to "api"
         )
     }
 
@@ -229,7 +231,12 @@ internal open class Account(
         callback: (details: DedicatedIPTokenDetails?, error: List<AccountRequestError>) -> Unit
     ) {
         launch {
-            getDedicatedIPAsync(countryCode, regionName, endpointsProvider.accountEndpoints(), callback)
+            getDedicatedIPAsync(
+                countryCode,
+                regionName,
+                endpointsProvider.accountEndpoints(),
+                callback
+            )
         }
     }
 
@@ -376,7 +383,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -395,7 +405,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.LOGIN_LINK)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.LOGIN_LINK.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.LOGIN_LINK.url}"
+                    )
+                )
                 continue
             }
 
@@ -403,9 +418,10 @@ internal open class Account(
             val formParameters = Parameters.build {
                 append("email", email)
             }
-            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
-                url(url)
-            }
+            val response =
+                httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
+                    url(url)
+                }
 
             response.first?.let {
                 succeeded = AccountUtils.isErrorStatusCode(it.status.value).not()
@@ -461,7 +477,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -480,7 +499,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.LOGIN)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.LOGIN.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.LOGIN.url}"
+                    )
+                )
                 continue
             }
 
@@ -489,16 +513,18 @@ internal open class Account(
                 append("username", username)
                 append("password", password)
             }
-            val requestResponse = httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
-                url(url)
-            }
+            val requestResponse =
+                httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
+                    url(url)
+                }
 
             requestResponse.first?.let {
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
                     listErrors.add(it.mapStatusCodeToAccountError())
                 } else {
                     try {
-                        val apiTokenResponse = json.decodeFromString(ApiTokenResponse.serializer(), it.bodyAsText())
+                        val apiTokenResponse =
+                            json.decodeFromString(ApiTokenResponse.serializer(), it.bodyAsText())
                         persistence.persistApiTokenResponse(apiTokenResponse)
                         refreshVpnToken(apiTokenResponse.apiToken, endpoints)
                         succeeded = true
@@ -560,7 +586,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -579,7 +608,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.LOGOUT)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.LOGOUT.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.LOGOUT.url}"
+                    )
+                )
                 continue
             }
 
@@ -653,7 +687,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -672,7 +709,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.ACCOUNT_DETAILS)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.ACCOUNT_DETAILS.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.ACCOUNT_DETAILS.url}"
+                    )
+                )
                 continue
             }
 
@@ -687,7 +729,8 @@ internal open class Account(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        accountInformation = json.decodeFromString(AccountInformation.serializer(), it.bodyAsText())
+                        accountInformation =
+                            json.decodeFromString(AccountInformation.serializer(), it.bodyAsText())
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -747,7 +790,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -766,7 +812,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.DELETE_ACCOUNT)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.DELETE_ACCOUNT.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.DELETE_ACCOUNT.url}"
+                    )
+                )
                 continue
             }
 
@@ -839,7 +890,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -856,9 +910,17 @@ internal open class Account(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.SUPPORTED_DEDICATED_IP_COUNTRIES)
+            val url = AccountUtils.prepareRequestUrl(
+                endpoint.ipOrRootDomain,
+                Path.SUPPORTED_DEDICATED_IP_COUNTRIES
+            )
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SUPPORTED_DEDICATED_IP_COUNTRIES.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SUPPORTED_DEDICATED_IP_COUNTRIES.url}"
+                    )
+                )
                 continue
             }
 
@@ -938,7 +1000,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -955,9 +1020,15 @@ internal open class Account(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.GET_DEDICATED_IP_TOKEN)
+            val url =
+                AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.GET_DEDICATED_IP_TOKEN)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.GET_DEDICATED_IP_TOKEN.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.GET_DEDICATED_IP_TOKEN.url}"
+                    )
+                )
                 continue
             }
 
@@ -966,7 +1037,12 @@ internal open class Account(
                 url(url)
                 header("Authorization", "Token $apiToken")
                 contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(GetDedicatedIPTokenRequest.serializer(), GetDedicatedIPTokenRequest(countryCode, regionName)))
+                setBody(
+                    json.encodeToString(
+                        GetDedicatedIPTokenRequest.serializer(),
+                        GetDedicatedIPTokenRequest(countryCode, regionName)
+                    )
+                )
             }
 
             response.first?.let {
@@ -974,7 +1050,10 @@ internal open class Account(
                     listErrors.add(it.mapStatusCodeToAccountError())
                 } else {
                     try {
-                        details = json.decodeFromString(DedicatedIPTokenDetails.serializer(), it.bodyAsText())
+                        details = json.decodeFromString(
+                            DedicatedIPTokenDetails.serializer(),
+                            it.bodyAsText()
+                        )
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -1036,7 +1115,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1053,9 +1135,15 @@ internal open class Account(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.REDEEM_DEDICATED_IP)
+            val url =
+                AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.REDEEM_DEDICATED_IP)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REDEEM_DEDICATED_IP.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REDEEM_DEDICATED_IP.url}"
+                    )
+                )
                 continue
             }
 
@@ -1064,7 +1152,12 @@ internal open class Account(
                 url(url)
                 header("Authorization", "Token $apiToken")
                 contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(DedicatedIPRequest.serializer(), DedicatedIPRequest(dipTokens)))
+                setBody(
+                    json.encodeToString(
+                        DedicatedIPRequest.serializer(),
+                        DedicatedIPRequest(dipTokens)
+                    )
+                )
             }
 
             response.first?.let {
@@ -1074,7 +1167,8 @@ internal open class Account(
                     try {
                         dedicatedIPsInformation =
                             json.decodeFromString(
-                                DedicatedIPInformationResponse.serializer(), "{\"result\":${it.bodyAsText()}}"
+                                DedicatedIPInformationResponse.serializer(),
+                                "{\"result\":${it.bodyAsText()}}"
                             ).result
                         succeeded = true
                     } catch (exception: SerializationException) {
@@ -1136,7 +1230,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1153,9 +1250,15 @@ internal open class Account(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.RENEW_DEDICATED_IP)
+            val url =
+                AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.RENEW_DEDICATED_IP)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.RENEW_DEDICATED_IP.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.RENEW_DEDICATED_IP.url}"
+                    )
+                )
                 continue
             }
 
@@ -1163,10 +1266,11 @@ internal open class Account(
             val formParameters = Parameters.build {
                 append("token", dipToken)
             }
-            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
-                url(url)
-                header("Authorization", "Token $apiToken")
-            }
+            val response =
+                httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
+                    url(url)
+                    header("Authorization", "Token $apiToken")
+                }
 
             response.first?.let {
                 succeeded = AccountUtils.isErrorStatusCode(it.status.value).not()
@@ -1224,7 +1328,11 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!), requestTimeoutMillis)
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!),
+                    requestTimeoutMillis
+                )
             } else {
                 AccountHttpClient.client(requestTimeoutMillis = requestTimeoutMillis)
             }
@@ -1243,7 +1351,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.CLIENT_STATUS)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.CLIENT_STATUS.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.CLIENT_STATUS.url}"
+                    )
+                )
                 continue
             }
 
@@ -1257,7 +1370,10 @@ internal open class Account(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        clientStatus = json.decodeFromString(ClientStatusInformation.serializer(), it.bodyAsText())
+                        clientStatus = json.decodeFromString(
+                            ClientStatusInformation.serializer(),
+                            it.bodyAsText()
+                        )
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -1320,7 +1436,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1339,7 +1458,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.SET_EMAIL)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SET_EMAIL.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.SET_EMAIL.url}"
+                    )
+                )
                 continue
             }
 
@@ -1348,17 +1472,21 @@ internal open class Account(
                 append("email", email)
                 append("reset_password", resetPassword.toString())
             }
-            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
-                url(url)
-                header("Authorization", "Token $apiToken")
-            }
+            val response =
+                httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
+                    url(url)
+                    header("Authorization", "Token $apiToken")
+                }
 
             response.first?.let {
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        temporaryPassword = json.decodeFromString(SetEmailResponse.serializer(), it.bodyAsText()).password
+                        temporaryPassword = json.decodeFromString(
+                            SetEmailResponse.serializer(),
+                            it.bodyAsText()
+                        ).password
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -1420,7 +1548,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1439,7 +1570,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.INVITES)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.INVITES.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.INVITES.url}"
+                    )
+                )
                 continue
             }
 
@@ -1448,10 +1584,11 @@ internal open class Account(
                 append("invitee_email", recipientEmail)
                 append("invitee_name", recipientName)
             }
-            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
-                url(url)
-                header("Authorization", "Token $apiToken")
-            }
+            val response =
+                httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
+                    url(url)
+                    header("Authorization", "Token $apiToken")
+                }
 
             response.first?.let {
                 succeeded = AccountUtils.isErrorStatusCode(it.status.value).not()
@@ -1513,7 +1650,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1532,7 +1672,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.INVITES)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.INVITES.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.INVITES.url}"
+                    )
+                )
                 continue
             }
 
@@ -1547,7 +1692,10 @@ internal open class Account(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        invitesDetailsInformation = json.decodeFromString(InvitesDetailsInformation.serializer(), it.bodyAsText())
+                        invitesDetailsInformation = json.decodeFromString(
+                            InvitesDetailsInformation.serializer(),
+                            it.bodyAsText()
+                        )
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -1604,7 +1752,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1623,7 +1774,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.REDEEM)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REDEEM.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REDEEM.url}"
+                    )
+                )
                 continue
             }
 
@@ -1632,16 +1788,18 @@ internal open class Account(
                 append("email", email)
                 append("pin", code)
             }
-            val response = httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
-                url(url)
-            }
+            val response =
+                httpClient.postCatching<Pair<HttpResponse?, Exception?>>(formParameters = formParameters) {
+                    url(url)
+                }
 
             response.first?.let {
                 if (AccountUtils.isErrorStatusCode(it.status.value)) {
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        redeemInformation = json.decodeFromString(RedeemInformation.serializer(), it.bodyAsText())
+                        redeemInformation =
+                            json.decodeFromString(RedeemInformation.serializer(), it.bodyAsText())
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -1703,7 +1861,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1722,7 +1883,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.MESSAGES)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.MESSAGES.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.MESSAGES.url}"
+                    )
+                )
                 continue
             }
 
@@ -1743,7 +1909,8 @@ internal open class Account(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        messageInformation = json.decodeFromString(MessageInformation.serializer(), it.bodyAsText())
+                        messageInformation =
+                            json.decodeFromString(MessageInformation.serializer(), it.bodyAsText())
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -1798,7 +1965,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1821,7 +1991,12 @@ internal open class Account(
             }
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, path)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${path.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${path.url}"
+                    )
+                )
                 continue
             }
 
@@ -1835,7 +2010,10 @@ internal open class Account(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        flagsInformation = json.decodeFromString(FeatureFlagsInformation.serializer(), it.bodyAsText())
+                        flagsInformation = json.decodeFromString(
+                            FeatureFlagsInformation.serializer(),
+                            it.bodyAsText()
+                        )
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))
@@ -1927,7 +2105,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -1944,9 +2125,15 @@ internal open class Account(
                 continue
             }
 
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.REFRESH_API_TOKEN)
+            val url =
+                AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.REFRESH_API_TOKEN)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REFRESH_API_TOKEN.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REFRESH_API_TOKEN.url}"
+                    )
+                )
                 continue
             }
 
@@ -1961,7 +2148,8 @@ internal open class Account(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        val apiTokenResponse = json.decodeFromString(ApiTokenResponse.serializer(), it.bodyAsText())
+                        val apiTokenResponse =
+                            json.decodeFromString(ApiTokenResponse.serializer(), it.bodyAsText())
                         persistence.persistApiTokenResponse(apiTokenResponse)
                         succeeded = true
                     } catch (exception: SerializationException) {
@@ -2026,7 +2214,10 @@ internal open class Account(
             }
 
             val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+                AccountHttpClient.client(
+                    certificate,
+                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                )
             } else {
                 AccountHttpClient.client()
             }
@@ -2045,7 +2236,12 @@ internal open class Account(
 
             val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.VPN_TOKEN)
             if (url == null) {
-                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.VPN_TOKEN.url}"))
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.VPN_TOKEN.url}"
+                    )
+                )
                 continue
             }
 
@@ -2060,7 +2256,12 @@ internal open class Account(
                     listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
                     try {
-                        persistence.persistVpnTokenResponse(json.decodeFromString(VpnTokenResponse.serializer(), it.bodyAsText()))
+                        persistence.persistVpnTokenResponse(
+                            json.decodeFromString(
+                                VpnTokenResponse.serializer(),
+                                it.bodyAsText()
+                            )
+                        )
                         succeeded = true
                     } catch (exception: SerializationException) {
                         listErrors.add(AccountRequestError(600, "Decode error $exception"))

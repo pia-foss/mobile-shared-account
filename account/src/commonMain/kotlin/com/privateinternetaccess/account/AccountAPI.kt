@@ -183,7 +183,10 @@ public interface AccountAPI {
      * @param appVersion `String`
      * @param callback `(message: MessageInformation?, error: List<AccountRequestError>) -> Unit`
      */
-    fun message(appVersion: String, callback: (message: MessageInformation?, error: List<AccountRequestError>) -> Unit)
+    fun message(
+        appVersion: String,
+        callback: (message: MessageInformation?, error: List<AccountRequestError>) -> Unit
+    )
 
     /**
      * @param callback `(details: FeatureFlagsInformation?, error: List<AccountRequestError>) -> Unit`
@@ -196,7 +199,7 @@ public interface AccountAPI {
 /**
  * Interface defining the Android specifics API deriving from the base one `AccountAPI`
  */
-public interface AndroidAccountAPI: AccountAPI {
+public interface AndroidAccountAPI : AccountAPI {
 
     /**
      * @param store `String`
@@ -269,12 +272,14 @@ public interface AndroidAccountAPI: AccountAPI {
      */
     fun amazonSubscriptions(callback: (details: AmazonSubscriptionsInformation?, error: List<AccountRequestError>) -> Unit)
 
+    fun latestRelease(callback: (latestClientVersion: LatestClientVersion?, error: List<AccountRequestError>) -> Unit)
+
 }
 
 /**
  * Interface defining the iOS specifics API deriving from the base one `AccountAPI`
  */
-public interface IOSAccountAPI: AccountAPI {
+public interface IOSAccountAPI : AccountAPI {
 
     /**
      * @param receiptBase64 `String`
@@ -421,7 +426,11 @@ public class AccountBuilder<T> {
 /**
  * Request error message containing the http code, description and retryAfterSeconds in seconds.
  */
-public data class AccountRequestError(val code: Int, val message: String?, val retryAfterSeconds: Long = 0)
+public data class AccountRequestError(
+    val code: Int,
+    val message: String?,
+    val retryAfterSeconds: Long = 0
+)
 
 /**
  * Data class defining the endpoints data needed when performing a request on it.

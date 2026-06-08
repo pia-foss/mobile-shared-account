@@ -47,3 +47,4 @@ Preview.html
 Gemfile.lock
 *.podspec
 *.xcframework
+.kotlin
