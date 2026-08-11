@@ -11,4 +11,4 @@ jobs:
           java-version: 17
           cache: gradle
       - name: build
-        run: ./gradlew bundleReleaseAar assembleAccountReleaseXCFramework --parallel
+        run: ./gradlew bundleAndroidMainAar --parallel
