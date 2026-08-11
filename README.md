@@ -4,15 +4,14 @@
 
 Private Internet Access is the world's leading consumer VPN service. At Private Internet Access we believe in unfettered access for all, and as a firm supporter of the open source ecosystem we have made the decision to open source our VPN clients. For more information about the PIA service, please visit our website [privateinternetaccess.com][pia-url] or check out the [Wiki][pia-wiki].
 
-# Account common library for Android and Apple platforms
+# Account common library for Android
 
-With this library, clients from iOS and Android can communicate easily with the Private Internet Access account's services.
+With this library, Android clients can communicate easily with the Private Internet Access account's services.
 
 ## Installation
 
 ### Requirements
  - Git (latest)
- - Xcode (latest)
  - Android Studio (latest)
  - Gradle (latest)
  - ADB installed
@@ -28,33 +27,28 @@ type in what folder you want to put in without the **
 
 #### Building
 
-Once the project is cloned, you can build the binaries by running the tasks `./gradlew bundleDebugAar` or `./gradlew bundleReleaseAar` for Android. And, `./gradlew assembleAccountDebugXCFramework` or `./gradlew assembleAccountReleaseXCFramework` for iOS. You can find the binaries at `[PROJECT_DIR]/account/build/outputs/aar` and `[PROJECT_DIR]/account/build/XCFrameworks` accordingly.
+Once the project is cloned, you can build the binary by running the task `./gradlew bundleAndroidMainAar`. You can find the binary at `[PROJECT_DIR]/account/build/outputs/aar`.
 
 ## Usage
 
 ### Android 
 
-To use this project in Android, you can run the task `./gradlew publishAndroidReleasePublicationToMavenLocal`. This will publish the package to your maven local (Make sure to have included `mavenLocal()` as part of your gradle repositories). Once successful, you can set the dependency as per any other package, e.g.:
+To use this project in Android, you can run the task `./gradlew publishToMavenLocal`. This will publish the package to your maven local (Make sure to have included `mavenLocal()` as part of your gradle repositories). Once successful, you can set the dependency as per any other package, e.g.:
 ```
 implementation("com.kape.android:account:[version_number]")
 ```
 where `[version_number]` is the version as set in `account/build.gradle.kts`.
 
-### iOS
-
-To use this project in iOS, once you have built `account.xcframework`. You can go to your project target. Build Phases. Link Binary With Libraries. (or alternatively drag the file there and skip the rest) Click the `+`. Add Other. Add Files. And look for `account.xcframework`.
-
 ## Documentation
 
 #### Architecture
 
-The library is formed by two layers. The common layer. Containing the business logic for all platforms. And, the bridging layer. Containing the platform specific logic being injected into the common layer.
+The library is built with the Kotlin Multiplatform structure, formed by two layers: the common layer, containing the business logic, and the bridging layer, containing the platform specific logic being injected into the common layer. Only the Android target is currently built.
 
 Code structure via packages:
 
 * `commonMain` - Common business logic.
 * `androidMain` - Android's bridging layer, providing the platform specific dependencies.
-* `iosMain` - iOS's bridging layer, providing the platform specific dependencies.
 
 #### Significant Classes and Interfaces
 

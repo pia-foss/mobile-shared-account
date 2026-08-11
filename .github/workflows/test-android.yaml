@@ -11,4 +11,4 @@ jobs:
           java-version: 17
           cache: gradle
       - name: unit-tests
-        run: ./gradlew test --parallel
+        run: ./gradlew allTests --parallel
