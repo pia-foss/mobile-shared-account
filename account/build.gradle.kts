@@ -46,10 +46,11 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.11.0")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
-            implementation("com.russhwolf:multiplatform-settings:1.3.0")
         }
         androidMain.dependencies {
             implementation("androidx.security:security-crypto:1.1.0")
+            implementation("androidx.datastore:datastore-preferences:1.1.1")
+            implementation("com.google.crypto.tink:tink-android:1.15.0")
             implementation("com.madgag.spongycastle:core:1.58.0.0")
             implementation("io.ktor:ktor-client-okhttp:3.5.2")
         }
