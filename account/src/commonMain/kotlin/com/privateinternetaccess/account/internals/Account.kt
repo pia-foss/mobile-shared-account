@@ -26,7 +26,7 @@ import com.privateinternetaccess.account.model.response.DipCountriesResponse
 import com.privateinternetaccess.account.internals.model.response.SetEmailResponse
 import com.privateinternetaccess.account.internals.model.response.VpnTokenResponse
 import com.privateinternetaccess.account.internals.persistency.AccountPersistence
-import com.privateinternetaccess.account.internals.persistency.secureSettings.SecureSettingsPersistence
+import com.privateinternetaccess.account.internals.persistency.datastore.TokenPersistence
 import com.privateinternetaccess.account.internals.utils.AccountUtils
 import com.privateinternetaccess.account.internals.utils.NetworkUtils.mapStatusCodeToAccountError
 import com.privateinternetaccess.account.model.response.*
@@ -66,7 +66,7 @@ internal open class Account(
     internal val certificate: String?,
     private val userAgentValue: String,
     private val platform: Platform,
-    internal val persistence: AccountPersistence = SecureSettingsPersistence
+    internal val persistence: AccountPersistence = TokenPersistence
 ) : CoroutineScope, AccountAPI {
 
     internal enum class Path(val url: String) {
@@ -160,11 +160,11 @@ internal open class Account(
     // endregion
 
     override fun apiToken(): String? {
-        return persistence.apiTokenResponse()?.apiToken
+        return persistence.cachedApiTokenResponse()?.apiToken
     }
 
     override fun vpnToken(): String? {
-        return persistence.vpnTokenResponse()?.let {
+        return persistence.cachedVpnTokenResponse()?.let {
             "vpn_token_${it.vpnUsernameToken}:${it.vpnPasswordToken}"
         }
     }
