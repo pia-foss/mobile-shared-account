@@ -430,7 +430,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -534,7 +534,7 @@ internal open class Account(
                 }
             }
             requestResponse.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -630,7 +630,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -738,7 +738,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -834,7 +834,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -945,7 +945,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1061,7 +1061,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1177,7 +1177,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1279,7 +1279,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1381,7 +1381,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1494,7 +1494,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1597,7 +1597,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1703,7 +1703,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1807,7 +1807,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -1918,7 +1918,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -2021,7 +2021,7 @@ internal open class Account(
                 }
             }
             response.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -2158,7 +2158,7 @@ internal open class Account(
                 }
             }
             requestResponse.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
@@ -2269,7 +2269,7 @@ internal open class Account(
                 }
             }
             requestResponse.second?.let {
-                listErrors.add(AccountRequestError(600, it.message))
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
             }
 
             // Close the used client explicitly.
