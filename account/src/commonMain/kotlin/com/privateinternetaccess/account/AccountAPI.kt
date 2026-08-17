@@ -430,7 +430,15 @@ public data class AccountRequestError(
     val code: Int,
     val message: String?,
     val retryAfterSeconds: Long = 0
-)
+) {
+    public companion object {
+        /**
+         * Code used when the request could not reach the server at all (e.g. no connectivity,
+         * DNS failure, timeout), as opposed to a response actually returned by the server.
+         */
+        public const val NETWORK_ERROR_CODE: Int = 601
+    }
+}
 
 /**
  * Data class defining the endpoints data needed when performing a request on it.
