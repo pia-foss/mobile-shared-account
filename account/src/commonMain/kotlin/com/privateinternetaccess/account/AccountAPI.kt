@@ -194,6 +194,8 @@ public interface AccountAPI {
     fun featureFlags(
         callback: (details: FeatureFlagsInformation?, error: List<AccountRequestError>) -> Unit
     )
+
+    fun locationInfo(callback: (locationInfo: LocationInfo?, error: List<AccountRequestError>) -> Unit)
 }
 
 /**

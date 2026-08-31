@@ -98,7 +98,8 @@ internal open class Account(
         IOS_SUBSCRIPTIONS("/api/client/ios"),
         IOS_FEATURE_FLAG("/clients/desktop/ios-flags"),
         VALIDATE_QR("/api/client/v5/login_token/auth"),
-        LATEST_ANDROID_VERSION("/api/client/android/latest_release")
+        LATEST_ANDROID_VERSION("/api/client/android/latest_release"),
+        LOCATION_INFO("/api/geo")
     }
 
     companion object {
@@ -136,7 +137,8 @@ internal open class Account(
             Path.IOS_SUBSCRIPTIONS to "api",
             Path.IOS_FEATURE_FLAG to "api",
             Path.VALIDATE_QR to "apiv5",
-            Path.LATEST_ANDROID_VERSION to "api"
+            Path.LATEST_ANDROID_VERSION to "api",
+            Path.LOCATION_INFO to "api"
         )
     }
 
@@ -325,6 +327,12 @@ internal open class Account(
     ) {
         launch {
             featureFlagsAsync(endpointsProvider.accountEndpoints(), callback)
+        }
+    }
+
+    override fun locationInfo(callback: (locationInfo: LocationInfo?, error: List<AccountRequestError>) -> Unit) {
+        launch {
+            locationInfoAsync(endpointsProvider.accountEndpoints(), callback)
         }
     }
     // endregion
@@ -2037,6 +2045,94 @@ internal open class Account(
 
         withContext(Dispatchers.Main) {
             callback(flagsInformation, listErrors)
+        }
+    }
+
+    private suspend fun locationInfoAsync(
+        endpoints: List<AccountEndpoint>,
+        callback: (locationInfo: LocationInfo?, error: List<AccountRequestError>) -> Unit
+    ) {
+        val listErrors: MutableList<AccountRequestError> = mutableListOf()
+        var locationInfo: LocationInfo? = null
+        if (endpoints.isEmpty()) {
+            listErrors.add(
+                AccountRequestError(
+                    600,
+                    "No available endpoints to perform the request"
+                )
+            )
+        }
+
+        refreshTokensIfNeeded(endpoints)
+        for (endpoint in endpoints) {
+            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                listErrors.add(
+                    AccountRequestError(
+                        600,
+                        "No available certificate for pinning purposes"
+                    )
+                )
+                continue
+            }
+
+            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                AccountHttpClient.client(certificate, Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!))
+            } else {
+                AccountHttpClient.client()
+            }
+
+            val httpClient = httpClientConfigResult.first
+            val httpClientError = httpClientConfigResult.second
+            if (httpClientError != null) {
+                listErrors.add(AccountRequestError(600, httpClientError.message))
+                continue
+            }
+
+            if (httpClient == null) {
+                listErrors.add(AccountRequestError(600, "Invalid http client"))
+                continue
+            }
+
+            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.LOCATION_INFO)
+            if (url == null) {
+                listErrors.add(AccountRequestError(600, "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.LOCATION_INFO.url}"))
+                continue
+            }
+
+            var succeeded = false
+            val response = httpClient.getCatching<Pair<HttpResponse?, Exception?>> {
+                url(url)
+            }
+
+            response.first?.let {
+                if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                    listErrors.add(it.mapStatusCodeToAccountError())
+                } else {
+                    try {
+                        locationInfo = json.decodeFromString(LocationInfo.serializer(), it.bodyAsText())
+                        succeeded = true
+                    } catch (exception: SerializationException) {
+                        listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                    }
+                }
+            }
+            response.second?.let {
+                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
+            }
+
+            // Close the used client explicitly.
+            // We need to recreate it due to the possibility of pinning among the endpoints list.
+            httpClient.close()
+
+            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+            if (succeeded) {
+                listErrors.clear()
+                break
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            callback(locationInfo, listErrors)
         }
     }
 
