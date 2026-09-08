@@ -104,7 +104,7 @@ internal open class Account(
     companion object {
         internal const val API_TOKEN_KEY = "API_TOKEN_KEY"
         internal const val VPN_TOKEN_KEY = "VPN_TOKEN_KEY"
-        internal const val REQUEST_TIMEOUT_MS = 3000L
+        internal const val REQUEST_TIMEOUT_MS = 10000L
         internal const val MIN_EXPIRATION_THRESHOLD_DAYS = 21.0
         internal val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
         internal val SUBDOMAINS = mapOf(
