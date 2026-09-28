@@ -18,6 +18,8 @@ import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import com.privateinternetaccess.account.internals.Account
 import com.privateinternetaccess.account.internals.AccountContextProvider
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -25,6 +27,7 @@ import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
+import java.security.ProviderException
 
 /**
  * Android-backed encrypted key/value store: a Preferences DataStore whose values are encrypted
@@ -32,6 +35,11 @@ import java.security.KeyStore
  *
  * On first initialization, any values still sitting in the legacy `EncryptedSharedPreferences`
  * store (see KM-17766) are migrated in and the legacy store is deleted.
+ *
+ * Right after a device boot the Android Keystore can transiently fail (notably on Fire OS), so
+ * building the AEAD primitive is retried with backoff. Reads never reset the keyset: doing so
+ * would permanently orphan the stored tokens and log the user out on every power cycle. A reset
+ * is only allowed on the write path, where the values being written replace the stored ones.
  */
 internal actual object EncryptedKeyValueStore {
 
@@ -42,9 +50,13 @@ internal actual object EncryptedKeyValueStore {
     private const val MASTER_KEY_ALIAS = "com.privateinternetaccess.account_tink_master_key"
     private const val MASTER_KEY_URI = "android-keystore://$MASTER_KEY_ALIAS"
 
+    private const val AEAD_BUILD_ATTEMPTS = 5
+    private const val AEAD_RETRY_BASE_DELAY_MS = 200L
+
     private val LEGACY_MIGRATION_COMPLETED_KEY = booleanPreferencesKey("legacy_migration_completed")
 
     private val initLock = Mutex()
+    private val aeadLock = Mutex()
     private val cache = mutableMapOf<String, String>()
 
     @Volatile
@@ -55,7 +67,7 @@ internal actual object EncryptedKeyValueStore {
 
     actual suspend fun putString(key: String, value: String) {
         val store = ensureInitialized() ?: return
-        val encrypted = encrypt(value)
+        val encrypted = encrypt(value, allowKeysetReset = true)
         store.edit { it[stringPreferencesKey(key)] = encrypted }
         synchronized(cache) { cache[key] = value }
     }
@@ -96,20 +108,30 @@ internal actual object EncryptedKeyValueStore {
 
     private suspend fun warmCache(store: DataStore<Preferences>) {
         val prefs = currentPreferences(store)
+        val decrypted = listOf(Account.API_TOKEN_KEY, Account.VPN_TOKEN_KEY).mapNotNull { key ->
+            prefs[stringPreferencesKey(key)]?.let { encrypted ->
+                decryptOrNull(encrypted)?.let { key to it }
+            }
+        }
         synchronized(cache) {
             cache.clear()
-            listOf(Account.API_TOKEN_KEY, Account.VPN_TOKEN_KEY).forEach { key ->
-                prefs[stringPreferencesKey(key)]?.let { encrypted ->
-                    runCatching { decrypt(encrypted) }.getOrNull()?.let { cache[key] = it }
-                }
-            }
+            cache.putAll(decrypted)
         }
     }
 
     private suspend fun readDecrypted(store: DataStore<Preferences>, key: String): String? {
         val encrypted = currentPreferences(store)[stringPreferencesKey(key)] ?: return null
-        return runCatching { decrypt(encrypted) }.getOrNull()
+        return decryptOrNull(encrypted)
     }
+
+    private suspend fun decryptOrNull(encrypted: String): String? =
+        try {
+            decrypt(encrypted)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
 
     private suspend fun currentPreferences(store: DataStore<Preferences>): Preferences =
         store.data.catch { exception ->
@@ -120,7 +142,8 @@ internal actual object EncryptedKeyValueStore {
         if (currentPreferences(store)[LEGACY_MIGRATION_COMPLETED_KEY] == true) return
 
         readLegacyPreferences(context)?.forEach { (key, value) ->
-            store.edit { it[stringPreferencesKey(key)] = encrypt(value) }
+            // Nothing has been written to the DataStore yet, so a keyset reset can't orphan data.
+            store.edit { it[stringPreferencesKey(key)] = encrypt(value, allowKeysetReset = true) }
         }
         deleteLegacyStore(context)
 
@@ -162,31 +185,57 @@ internal actual object EncryptedKeyValueStore {
         }
     }
 
-    private fun encrypt(value: String): String {
-        val ciphertext = aead().encrypt(value.toByteArray(Charsets.UTF_8), null)
+    private suspend fun encrypt(value: String, allowKeysetReset: Boolean): String {
+        val ciphertext = aead(allowKeysetReset).encrypt(value.toByteArray(Charsets.UTF_8), null)
         return Base64.encodeToString(ciphertext, Base64.NO_WRAP)
     }
 
-    private fun decrypt(value: String): String {
-        val plaintext = aead().decrypt(Base64.decode(value, Base64.NO_WRAP), null)
+    private suspend fun decrypt(value: String): String {
+        val plaintext = aead(allowKeysetReset = false).decrypt(Base64.decode(value, Base64.NO_WRAP), null)
         return String(plaintext, Charsets.UTF_8)
     }
 
-    private fun aead(): Aead {
+    /**
+     * Returns the AEAD primitive, retrying while the Keystore may still be coming up. Failures are
+     * not cached, so a later call tries again. The keyset is only reset (discarding every value
+     * encrypted with it) when [allowKeysetReset] is set and all attempts have failed.
+     */
+    private suspend fun aead(allowKeysetReset: Boolean): Aead {
         aead?.let { return it }
-        val context = requireNotNull(AccountContextProvider.applicationContext) {
-            "Account context not available"
+        aeadLock.withLock {
+            aead?.let { return it }
+            val context = requireNotNull(AccountContextProvider.applicationContext) {
+                "Account context not available"
+            }
+            AeadConfig.register()
+            val primitive = try {
+                buildAeadWithRetry(context)
+            } catch (e: Exception) {
+                if (!allowKeysetReset || !e.isKeysetFailure()) throw e
+                resetKeyset(context)
+                buildAead(context)
+            }
+            aead = primitive
+            return primitive
         }
-        AeadConfig.register()
-        val primitive = try {
-            buildAead(context)
-        } catch (e: GeneralSecurityException) {
-            resetKeyset(context)
-            buildAead(context)
-        }
-        aead = primitive
-        return primitive
     }
+
+    private suspend fun buildAeadWithRetry(context: Context): Aead {
+        var attempt = 0
+        while (true) {
+            try {
+                return buildAead(context)
+            } catch (e: Exception) {
+                if (!e.isKeysetFailure() || ++attempt >= AEAD_BUILD_ATTEMPTS) throw e
+                delay(AEAD_RETRY_BASE_DELAY_MS * attempt)
+            }
+        }
+    }
+
+    // Tink surfaces Keystore/keyset problems as GeneralSecurityException, ProviderException or,
+    // when a keyset can't be parsed, IOException (InvalidProtocolBufferException).
+    private fun Exception.isKeysetFailure(): Boolean =
+        this is GeneralSecurityException || this is ProviderException || this is IOException
 
     private fun buildAead(context: Context): Aead =
         AndroidKeysetManager.Builder()
