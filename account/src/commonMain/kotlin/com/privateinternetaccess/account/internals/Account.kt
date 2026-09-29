@@ -171,6 +171,14 @@ internal open class Account(
         }
     }
 
+    override fun loadPersistedTokens(callback: () -> Unit) {
+        launch {
+            persistence.apiTokenResponse()
+            persistence.vpnTokenResponse()
+            callback()
+        }
+    }
+
     override fun migrateApiToken(
         apiToken: String,
         callback: (error: List<AccountRequestError>) -> Unit
