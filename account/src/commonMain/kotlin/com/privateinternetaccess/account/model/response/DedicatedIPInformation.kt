@@ -31,6 +31,10 @@ data class DedicatedIPInformationResponse(
         @SerialName("dip_token")
         val dipToken: String,
         @SerialName("status")
-        val status: Status
+        val status: Status,
+        @SerialName("van")
+        val van: Boolean = false,
+        @SerialName("ports")
+        val ports: Map<String, List<Int>> = emptyMap()
     )
 }

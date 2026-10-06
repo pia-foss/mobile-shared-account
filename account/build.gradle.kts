@@ -21,7 +21,7 @@ publishing {
 
 kotlin {
     group = "com.kape.android"
-    version = "1.6.6"
+    version = "1.6.7"
 
     jvmToolchain(17)
 
