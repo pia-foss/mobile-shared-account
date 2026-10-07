@@ -13,7 +13,8 @@ internal expect object EncryptedKeyValueStore {
 
     /**
      * Last known value for [key], served from an in-memory cache without suspending.
-     * Populated on store initialization and kept up to date on every write/remove.
+     * Populated on store initialization and kept up to date on every write/remove. If the store
+     * is still initializing, blocks the calling thread until the stored values are loaded.
      */
     fun cachedString(key: String): String?
 }

@@ -57,9 +57,9 @@ public interface AccountAPI {
     fun vpnToken(): String?
 
     /**
-     * Loads the persisted tokens into memory. [apiToken] and [vpnToken] only read an in-memory
-     * cache that is otherwise filled lazily by the first authenticated request, so on a cold
-     * start they return `null` until this (or such a request) has completed.
+     * Loads the persisted tokens into memory without blocking. [apiToken] and [vpnToken] read an
+     * in-memory cache; called before it is loaded, they block the calling thread until it is.
+     * Calling this early in the app start avoids that wait.
      *
      * @param callback `() -> Unit` invoked once [apiToken] and [vpnToken] reflect the stored tokens.
      */
