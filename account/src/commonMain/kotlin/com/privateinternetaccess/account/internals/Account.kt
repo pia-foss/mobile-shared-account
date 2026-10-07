@@ -2197,86 +2197,88 @@ internal open class Account(
         }
 
         requestsPipeline.add(RequestPipeline.API_TOKEN)
-        for (endpoint in endpoints) {
-            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
-                listErrors.add(
-                    AccountRequestError(
-                        600,
-                        "No available certificate for pinning purposes"
+        try {
+            for (endpoint in endpoints) {
+                if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                    listErrors.add(
+                        AccountRequestError(
+                            600,
+                            "No available certificate for pinning purposes"
+                        )
                     )
-                )
-                continue
-            }
+                    continue
+                }
 
-            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(
-                    certificate,
-                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
-                )
-            } else {
-                AccountHttpClient.client()
-            }
-
-            val httpClient = httpClientConfigResult.first
-            val httpClientError = httpClientConfigResult.second
-            if (httpClientError != null) {
-                listErrors.add(AccountRequestError(600, httpClientError.message))
-                continue
-            }
-
-            if (httpClient == null) {
-                listErrors.add(AccountRequestError(600, "Invalid http client"))
-                continue
-            }
-
-            val url =
-                AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.REFRESH_API_TOKEN)
-            if (url == null) {
-                listErrors.add(
-                    AccountRequestError(
-                        600,
-                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REFRESH_API_TOKEN.url}"
+                val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                    AccountHttpClient.client(
+                        certificate,
+                        Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
                     )
-                )
-                continue
-            }
-
-            var succeeded = false
-            val requestResponse = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
-                url(url)
-                header("Authorization", "Token $apiToken")
-            }
-
-            requestResponse.first?.let {
-                if (AccountUtils.isErrorStatusCode(it.status.value)) {
-                    listErrors.add(AccountRequestError(it.status.value, it.status.description))
                 } else {
-                    try {
-                        val apiTokenResponse =
-                            json.decodeFromString(ApiTokenResponse.serializer(), it.bodyAsText())
-                        persistence.persistApiTokenResponse(apiTokenResponse)
-                        succeeded = true
-                    } catch (exception: SerializationException) {
-                        listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                    AccountHttpClient.client()
+                }
+
+                val httpClient = httpClientConfigResult.first
+                val httpClientError = httpClientConfigResult.second
+                if (httpClientError != null) {
+                    listErrors.add(AccountRequestError(600, httpClientError.message))
+                    continue
+                }
+
+                if (httpClient == null) {
+                    listErrors.add(AccountRequestError(600, "Invalid http client"))
+                    continue
+                }
+
+                val url =
+                    AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.REFRESH_API_TOKEN)
+                if (url == null) {
+                    listErrors.add(
+                        AccountRequestError(
+                            600,
+                            "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.REFRESH_API_TOKEN.url}"
+                        )
+                    )
+                    continue
+                }
+
+                var succeeded = false
+                val requestResponse = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                    url(url)
+                    header("Authorization", "Token $apiToken")
+                }
+
+                requestResponse.first?.let {
+                    if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                        listErrors.add(AccountRequestError(it.status.value, it.status.description))
+                    } else {
+                        try {
+                            val apiTokenResponse =
+                                json.decodeFromString(ApiTokenResponse.serializer(), it.bodyAsText())
+                            persistence.persistApiTokenResponse(apiTokenResponse)
+                            succeeded = true
+                        } catch (exception: SerializationException) {
+                            listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                        }
                     }
                 }
-            }
-            requestResponse.second?.let {
-                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
-            }
+                requestResponse.second?.let {
+                    listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
+                }
 
-            // Close the used client explicitly.
-            // We need to recreate it due to the possibility of pinning among the endpoints list.
-            httpClient.close()
+                // Close the used client explicitly.
+                // We need to recreate it due to the possibility of pinning among the endpoints list.
+                httpClient.close()
 
-            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
-            if (succeeded) {
-                listErrors.clear()
-                break
+                // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+                if (succeeded) {
+                    listErrors.clear()
+                    break
+                }
             }
+        } finally {
+            requestsPipeline.remove(RequestPipeline.API_TOKEN)
         }
-
-        requestsPipeline.remove(RequestPipeline.API_TOKEN)
         return listErrors
     }
 
@@ -2306,88 +2308,90 @@ internal open class Account(
         }
 
         requestsPipeline.add(RequestPipeline.VPN_TOKEN)
-        for (endpoint in endpoints) {
-            if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
-                listErrors.add(
-                    AccountRequestError(
-                        600,
-                        "No available certificate for pinning purposes"
-                    )
-                )
-                continue
-            }
-
-            val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
-                AccountHttpClient.client(
-                    certificate,
-                    Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
-                )
-            } else {
-                AccountHttpClient.client()
-            }
-
-            val httpClient = httpClientConfigResult.first
-            val httpClientError = httpClientConfigResult.second
-            if (httpClientError != null) {
-                listErrors.add(AccountRequestError(600, httpClientError.message))
-                continue
-            }
-
-            if (httpClient == null) {
-                listErrors.add(AccountRequestError(600, "Invalid http client"))
-                continue
-            }
-
-            val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.VPN_TOKEN)
-            if (url == null) {
-                listErrors.add(
-                    AccountRequestError(
-                        600,
-                        "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.VPN_TOKEN.url}"
-                    )
-                )
-                continue
-            }
-
-            var succeeded = false
-            val requestResponse = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
-                url(url)
-                header("Authorization", "Token $apiToken")
-            }
-
-            requestResponse.first?.let {
-                if (AccountUtils.isErrorStatusCode(it.status.value)) {
-                    listErrors.add(AccountRequestError(it.status.value, it.status.description))
-                } else {
-                    try {
-                        persistence.persistVpnTokenResponse(
-                            json.decodeFromString(
-                                VpnTokenResponse.serializer(),
-                                it.bodyAsText()
-                            )
+        try {
+            for (endpoint in endpoints) {
+                if (endpoint.usePinnedCertificate && certificate.isNullOrEmpty()) {
+                    listErrors.add(
+                        AccountRequestError(
+                            600,
+                            "No available certificate for pinning purposes"
                         )
-                        succeeded = true
-                    } catch (exception: SerializationException) {
-                        listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                    )
+                    continue
+                }
+
+                val httpClientConfigResult = if (endpoint.usePinnedCertificate) {
+                    AccountHttpClient.client(
+                        certificate,
+                        Pair(endpoint.ipOrRootDomain, endpoint.certificateCommonName!!)
+                    )
+                } else {
+                    AccountHttpClient.client()
+                }
+
+                val httpClient = httpClientConfigResult.first
+                val httpClientError = httpClientConfigResult.second
+                if (httpClientError != null) {
+                    listErrors.add(AccountRequestError(600, httpClientError.message))
+                    continue
+                }
+
+                if (httpClient == null) {
+                    listErrors.add(AccountRequestError(600, "Invalid http client"))
+                    continue
+                }
+
+                val url = AccountUtils.prepareRequestUrl(endpoint.ipOrRootDomain, Path.VPN_TOKEN)
+                if (url == null) {
+                    listErrors.add(
+                        AccountRequestError(
+                            600,
+                            "Error preparing url ${endpoint.ipOrRootDomain} - ${Path.VPN_TOKEN.url}"
+                        )
+                    )
+                    continue
+                }
+
+                var succeeded = false
+                val requestResponse = httpClient.postCatching<Pair<HttpResponse?, Exception?>> {
+                    url(url)
+                    header("Authorization", "Token $apiToken")
+                }
+
+                requestResponse.first?.let {
+                    if (AccountUtils.isErrorStatusCode(it.status.value)) {
+                        listErrors.add(AccountRequestError(it.status.value, it.status.description))
+                    } else {
+                        try {
+                            persistence.persistVpnTokenResponse(
+                                json.decodeFromString(
+                                    VpnTokenResponse.serializer(),
+                                    it.bodyAsText()
+                                )
+                            )
+                            succeeded = true
+                        } catch (exception: SerializationException) {
+                            listErrors.add(AccountRequestError(600, "Decode error $exception"))
+                        }
                     }
                 }
-            }
-            requestResponse.second?.let {
-                listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
-            }
+                requestResponse.second?.let {
+                    listErrors.add(AccountRequestError(AccountRequestError.NETWORK_ERROR_CODE, it.message))
+                }
 
-            // Close the used client explicitly.
-            // We need to recreate it due to the possibility of pinning among the endpoints list.
-            httpClient.close()
+                // Close the used client explicitly.
+                // We need to recreate it due to the possibility of pinning among the endpoints list.
+                httpClient.close()
 
-            // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
-            if (succeeded) {
-                listErrors.clear()
-                break
+                // If there were no errors in the request for the current endpoint. No need to try the next endpoint.
+                if (succeeded) {
+                    listErrors.clear()
+                    break
+                }
             }
+        } finally {
+            requestsPipeline.remove(RequestPipeline.VPN_TOKEN)
         }
-
-        requestsPipeline.remove(RequestPipeline.VPN_TOKEN)
         return listErrors
     }
     // endregion
